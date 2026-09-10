@@ -1,0 +1,7 @@
+node_modules/
+public/app.js
+public/terrain-worker.js
+public/landscape-worker.js
+public/engine-preview.js
+public/debug-bots.js
+public/*.js.map

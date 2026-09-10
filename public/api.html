@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Real Command API</title>
+  <style>
+    :root { --bg: #0b1210; --panel: #101a15; --border: #2a3d34; --text: #d7e3dc; --muted: #7f958b; --accent: #f5c518; --green: #3ecf5a; --red: #ff5a36; --blue: #5fa8ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "IBM Plex Sans", system-ui, sans-serif; }
+    header { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 20px; letter-spacing: 2px; } header h1 span { color: var(--accent); }
+    header a { color: var(--blue); }
+    main { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 70px); }
+    nav { border-right: 1px solid var(--border); padding: 16px; position: sticky; top: 0; height: calc(100vh - 70px); overflow: auto; }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 3px 6px; font-family: monospace; font-size: 12px; border-radius: 3px; }
+    nav a:hover { background: #172520; color: var(--text); }
+    section { padding: 20px 28px; }
+    .intro { color: var(--muted); max-width: 900px; }
+    .token { display: flex; gap: 8px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
+    input, textarea, button { font: inherit; color: var(--text); background: #0f1a15; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; }
+    button { cursor: pointer; background: #1a2a23; } button:hover { background: #24382f; }
+    button.primary { background: var(--accent); color: #111; font-weight: 600; }
+    .ep { border: 1px solid var(--border); border-radius: 6px; margin: 12px 0; background: var(--panel); }
+    .ep summary { cursor: pointer; padding: 10px 14px; display: flex; gap: 12px; align-items: center; list-style: none; }
+    .ep summary::-webkit-details-marker { display: none; }
+    .m { font-family: monospace; font-weight: 700; padding: 2px 8px; border-radius: 3px; font-size: 12px; min-width: 62px; text-align: center; }
+    .GET { background: #163d2a; color: var(--green); } .POST { background: #3d2f12; color: var(--accent); } .DELETE { background: #3d1a14; color: var(--red); }
+    .path { font-family: monospace; } .auth { color: var(--muted); font-size: 12px; margin-left: auto; }
+    .body { padding: 0 14px 14px; color: var(--muted); }
+    .body table { border-collapse: collapse; margin: 8px 0; font-size: 12px; } .body td, .body th { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+    pre { background: #07100c; border: 1px solid var(--border); padding: 10px; border-radius: 4px; overflow: auto; font-size: 12px; max-height: 420px; }
+    .try { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+    .try textarea { min-height: 60px; font-family: monospace; font-size: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    h2 { margin: 26px 0 8px; font-size: 16px; color: var(--accent); }
+    code { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>REAL <span>COMMAND</span> API</h1>
+    <a href="/">← back to the game</a>
+    <a href="/api/v1/openapi.json">openapi.json</a>
+    <a href="/api/v1/rules">rules</a>
+    <a href="/api/v1/catalog">catalog</a>
+  </header>
+  <main>
+    <nav id="nav"></nav>
+    <section>
+      <div class="intro">
+        <p>Everything the web client can do is available through this REST API (and the WebSocket stream). Scripts and AI agents use it to build and run a base:
+        register, pick a start position, deploy, produce, place buildings and command units.</p>
+        <p>Authentication: <code>Authorization: Bearer &lt;token&gt;</code>. Your token is shown in the game under <b>API &amp; KI</b>. Coordinates can be given as <code>x,y</code> (metres) or <code>lon,lat</code> (degrees).</p>
+      </div>
+      <div class="token">
+        <label>Token for "try it":</label>
+        <input id="token" size="44" placeholder="paste your player token">
+        <button id="save">use</button>
+        <span id="who" style="color: var(--muted)"></span>
+      </div>
+      <h2>Quick start (curl)</h2>
+      <pre id="quick"></pre>
+      <h2>Endpoints</h2>
+      <div id="endpoints">loading …</div>
+    </section>
+  </main>
+  <script>
+    const base = location.origin + '/api/v1'
+    const tokenInput = document.getElementById('token')
+    try { tokenInput.value = localStorage.getItem('rc.token') || '' } catch {}
+    document.getElementById('quick').textContent = [
+      `curl -s -X POST ${base}/players -H 'content-type: application/json' -d '{"name":"MyAgent"}'`,
+      `export TOKEN=...   # from the answer above (or the game UI)`,
+      `curl -s ${base}/rules | jq .workflow`,
+      `curl -s "${base}/spawn-spots?lon=10&lat=50&count=3" | jq .`,
+      `curl -s -X POST ${base}/me/spawn -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lon":10.1,"lat":50.2,"faction":"aurora"}'`,
+      `curl -s ${base}/me/situation -H "authorization: Bearer $TOKEN" | jq '.hints, .army.counts'`,
+      `curl -s -X POST ${base}/me/orders -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"ids":[CRAWLER_ID],"order":{"k":"deploy"}}'`,
+      `curl -s -X POST ${base}/me/production -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"type":"power"}'`,
+      `curl -s "${base}/me/build-spots?type=power" -H "authorization: Bearer $TOKEN" | jq '.spots[0]'`,
+      `curl -s -X POST ${base}/me/buildings -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"type":"power","x":...,"y":...}'`,
+    ].join('\n')
+    async function whoami() {
+      const t = tokenInput.value.trim()
+      if (!t) { document.getElementById('who').textContent = ''; return }
+      const r = await fetch(base + '/me', { headers: { authorization: 'Bearer ' + t } })
+      const j = await r.json()
+      document.getElementById('who').textContent = r.ok ? `player #${j.id} ${j.name} · funds ${j.funds}` : j.error
+    }
+    document.getElementById('save').onclick = () => { try { localStorage.setItem('rc.token', tokenInput.value.trim()) } catch {}; whoami() }
+    whoami()
+    fetch(base + '/openapi.json').then(r => r.json()).then(spec => {
+      const nav = document.getElementById('nav'), box = document.getElementById('endpoints')
+      box.innerHTML = ''
+      for (const [path, ops] of Object.entries(spec.paths)) {
+        for (const [method, op] of Object.entries(ops)) {
+          const id = (method + path).replace(/[^a-z0-9]/gi, '_')
+          const a = document.createElement('a'); a.href = '#' + id; a.textContent = `${method.toUpperCase()} ${path}`; nav.appendChild(a)
+          const d = document.createElement('details'); d.className = 'ep'; d.id = id
+          const params = (op.parameters || []).map(p => `<tr><td><code>${p.name}</code></td><td>${p.in}</td><td>${p.required ? 'required' : ''}</td><td>${p.description || ''}</td></tr>`).join('')
+          const bodySchema = op.requestBody ? JSON.stringify(op.requestBody.content['application/json'].schema, null, 1) : ''
+          d.innerHTML = `<summary><span class="m ${method.toUpperCase()}">${method.toUpperCase()}</span><span class="path">${path}</span><span>${op.summary}</span><span class="auth">${op.security ? '🔑 token' : 'public'}</span></summary>
+            <div class="body">${op.description ? `<p>${op.description}</p>` : ''}
+            ${params ? `<table><tr><th>name</th><th>in</th><th></th><th>description</th></tr>${params}</table>` : ''}
+            ${bodySchema ? `<div>Request body schema:</div><pre>${bodySchema}</pre>` : ''}
+            <div class="try"><div class="row"><input class="url" size="60" value="${base}${path}"></div>${method !== 'get' ? '<textarea class="req" placeholder="JSON body">{}</textarea>' : ''}<div class="row"><button class="primary go">Send</button><span class="status"></span></div><pre class="out"></pre></div></div>`
+          d.querySelector('.go').onclick = async () => {
+            const url = d.querySelector('.url').value
+            const headers = { 'content-type': 'application/json' }
+            const t = tokenInput.value.trim(); if (t) headers.authorization = 'Bearer ' + t
+            const init = { method: method.toUpperCase(), headers }
+            if (method !== 'get') init.body = d.querySelector('.req').value || '{}'
+            try {
+              const r = await fetch(url, init)
+              const text = await r.text()
+              d.querySelector('.status').textContent = `HTTP ${r.status}`
+              try { d.querySelector('.out').textContent = JSON.stringify(JSON.parse(text), null, 2) } catch { d.querySelector('.out').textContent = text }
+            } catch (e) { d.querySelector('.out').textContent = String(e) }
+          }
+          box.appendChild(d)
+        }
+      }
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "realcommand-community",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser interface, API description and AI agents for Real Command",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Realcommand/realcommand-community.git"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "build:prod": "node scripts/build.mjs --prod",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test-audio.mjs && node scripts/test-effects.mjs && node scripts/test-input.mjs && node scripts/test-poly.mjs && node scripts/test-radar.mjs && node scripts/test-responsive.mjs && node scripts/test-unit-roster.mjs"
+  },
+  "dependencies": {
+    "cordis": "^4.0.0-rc.9",
+    "three": "^0.186.0",
+    "@anthropic-ai/sdk": "^0.124.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "@types/node": "^26.4.1",
+    "@types/three": "^0.185.4"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
