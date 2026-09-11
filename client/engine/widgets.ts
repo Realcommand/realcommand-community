@@ -615,6 +615,11 @@ export interface DialogProps {
 
 export function openDialog(p: DialogProps, body: View) {
   const popScope = pushScope('dialog')
+  // Abdunkeln hinter dem Dialog. Der Schleier muss am Leben des Layers hängen,
+  // nicht am zurückgegebenen close(): geschlossen wird der Dialog meist über
+  // seine eigenen Knöpfe, das Kreuz oder Escape – und dann blieb der Schleier
+  // liegen und legte als bildschirmfüllende Fläche die ganze Oberfläche lahm.
+  const scrim = h('div', { class: 'rc-scrim' })
   const handle = openLayer(() => h('div', { class: { 'rc-dialog': true, 'is-danger': !!p.danger }, style: { width: (p.width ?? 480) + 'px' } },
     h('header', { class: 'rc-dialog-head' },
       p.icon && Icon(p.icon, { size: 18, class: 'rc-dialog-icon' }),
@@ -629,12 +634,9 @@ export function openDialog(p: DialogProps, body: View) {
         label: a.label, variant: a.variant ?? 'quiet',
         onClick: () => { a.onSelect?.(); if (a.close !== false) handle.close() },
       }))),
-  ), { kind: 'dialog', modal: true, class: 'rc-dialog-layer', onClose: popScope })
-  // Abdunkeln hinter dem Dialog
-  const scrim = h('div', { class: 'rc-scrim' })
+  ), { kind: 'dialog', modal: true, class: 'rc-dialog-layer', onClose: () => { scrim.remove(); popScope() } })
   handle.el.parentElement?.insertBefore(scrim, handle.el)
-  const close = handle.close
-  return { el: handle.el, close: () => { scrim.remove(); close() } }
+  return handle
 }
 
 // ---------------------------------------------------------------------------

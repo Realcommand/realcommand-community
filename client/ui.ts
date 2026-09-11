@@ -11,14 +11,14 @@ import { Context, Service } from 'cordis'
 import { BUILDINGS, UNITS, CATEGORIES, FACTIONS, DEFS, PRODUCER_ROLE, type Category, type Def, type FactionId, type UnitDef, type BuildingDef } from '../shared/data.ts'
 import { formatLonLat, formatDistance, lonLatToWorld } from '../shared/geo.ts'
 import { formatTime } from '../shared/math.ts'
-import { WORLD_W, WORLD_H, COMMUNITY_REPO_URL } from '../shared/constants.ts'
+import { WORLD_W, WORLD_H, COMMUNITY_REPO_URL, SELL_REFUND } from '../shared/constants.ts'
 import { drawIcon } from './sprites.ts'
 import { cancelReadyBuilding, cancelTarget, CANCEL_LABEL, missingPrereqs, productionMark, shownCategory } from './production.ts'
 import type { ClientEntity, Phase } from './state.ts'
 import { buildShell, type ShellRefs } from './ui/shell.ts'
 import { h, fill } from './engine/render.ts'
 import { installTheme } from './engine/theme.ts'
-import { toast as engineToast, tooltip } from './engine/widgets.ts'
+import { toast as engineToast, tooltip, openDialog } from './engine/widgets.ts'
 import { Icon } from './engine/icons.ts'
 import { radarBounds, paintRadarCoverage, paintRadarOverlay } from './ui/radar.ts'
 
@@ -816,13 +816,29 @@ export class UI extends Service {
         // den Auftrag wortlos nicht an. Der Knopf erscheint deshalb erst, wenn es
         // etwas auszubessern gibt – wie „In die Werkstatt“ bei den Fahrzeugen.
         if (b.repairing || b.hp < b.maxHp * 0.99) {
-          add('wrench', b.repairing ? 'Reparatur stoppen' : 'Reparieren', () => link.send({ t: 'repair', id: b.id }),
+          add('wrench', b.repairing ? 'Reparatur stoppen' : 'Reparieren', () => { link.send({ t: 'repair', id: b.id }); this.ctx.audio?.play('repair', { x: b.x, y: b.y }) },
             'Baut Schäden laufend aus; volle Instandsetzung kostet 30 % der Baukosten. Unter Beschuss ruht die Arbeit.')
         }
         if ((b.def as BuildingDef).produces) add('pin', 'Sammelpunkt', () => { input.mode = 'rally' }, 'Danach Position anklicken')
+        // Kein confirm(): eingebettete und ferngesteuerte Browser beantworten es
+        // wortlos mit „nein“, und der Knopf tat dann gar nichts. Der Dialog der
+        // Engine gehört ohnehin zum Rest der Oberfläche – und kann den Betrag
+        // nennen, den es wirklich gibt: anteilig zum Zustand, nicht pauschal.
         add('trash', 'Verkaufen', () => {
-          if (confirm(`${b.def?.name} wirklich verkaufen (50 % Erstattung)?`)) link.send({ t: 'sell', id: b.id })
-        }, '50 % Erstattung', true)
+          const def = b.def as BuildingDef | undefined
+          const back = Math.floor((def?.cost ?? 0) * SELL_REFUND * (b.hp / b.maxHp))
+          openDialog({
+            title: `${def?.name ?? 'Gebäude'} verkaufen?`,
+            icon: 'trash', danger: true, width: 420,
+            actions: [
+              { label: 'Abbrechen' },
+              { label: 'Verkaufen', variant: 'danger', onSelect: () => {
+                link.send({ t: 'sell', id: b.id })
+                this.ctx.audio?.play('sell', { x: b.x, y: b.y })
+              } },
+            ],
+          }, h('p', `Es verschwindet sofort. Zurück kommen ${back.toLocaleString('de-DE')} Credits – die Hälfte der Baukosten, anteilig zum Zustand.`))
+        }, 'Halbe Baukosten zurück, anteilig zum Zustand', true)
       }
     }
     fill(this.shell.actionsHost, ...actions)

@@ -105,9 +105,9 @@ export class Input extends Service {
       // Aufziehen mit zwei Fingern meldet der Browser als Rad mit Strg – aber in
       // winzigen Schritten. Mit dem Faktor des Mausrads bräuchte man hundert
       // Wischer für eine Zoomstufe, deshalb ein deutlich kräftigerer Faktor.
-      if (ev.ctrlKey) { cam.zoomBy(clampStep(Math.pow(ZOOM_PINCH, ev.deltaY)), ev.clientX, ev.clientY); return }
+      if (ev.ctrlKey) { cam.zoomBy(clampStep(Math.pow(ZOOM_PINCH, ev.deltaY)), ...this.zoomPivot(ev.clientX, ev.clientY)); return }
       if (this.trackpad) { cam.panPixels(ev.deltaX, ev.deltaY); return }
-      cam.zoomBy(clampStep(Math.pow(ZOOM_WHEEL, ev.deltaY)), ev.clientX, ev.clientY)
+      cam.zoomBy(clampStep(Math.pow(ZOOM_WHEEL, ev.deltaY)), ...this.zoomPivot(ev.clientX, ev.clientY))
     }
     const onCtx = (ev: MouseEvent) => ev.preventDefault()
     const onKeyDown = (ev: KeyboardEvent) => this.onKeyDown(ev)
@@ -125,7 +125,7 @@ export class Input extends Service {
     document.addEventListener('visibilitychange', onLeave)
     const stopTouch = bindTouchMap(canvas, {
       pan: (dx, dy) => this.ctx.camera.panPixels(dx, dy),
-      zoom: (factor, x, y) => this.ctx.camera.zoomBy(clampStep(factor), x, y),
+      zoom: (factor, x, y) => this.ctx.camera.zoomBy(clampStep(factor), ...this.zoomPivot(x, y)),
       tap: (x, y) => {
         const event = new MouseEvent('mouseup', { button: 0, clientX: x, clientY: y })
         this.onMouseMove(event)
@@ -160,8 +160,8 @@ export class Input extends Service {
     if (this.keys.has('KeyA') && this.mode !== 'attackmove' || this.keys.has('ArrowLeft')) dx -= speed
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += speed
     if (dx || dy) cam.panPixels(dx, dy)
-    if (this.keys.has('Equal') || this.keys.has('NumpadAdd')) cam.zoomBy(Math.pow(0.06, dt))
-    if (this.keys.has('Minus') || this.keys.has('NumpadSubtract')) cam.zoomBy(Math.pow(16, dt))
+    if (this.keys.has('Equal') || this.keys.has('NumpadAdd')) cam.zoomBy(Math.pow(0.06, dt), ...this.zoomPivot())
+    if (this.keys.has('Minus') || this.keys.has('NumpadSubtract')) cam.zoomBy(Math.pow(16, dt), ...this.zoomPivot())
     this.updateHover()
   }
 
@@ -326,6 +326,26 @@ export class Input extends Service {
     const y0 = Math.min(drag.y0, drag.y1), y1 = Math.max(drag.y0, drag.y1)
     const ids = this.unitsInScreenRect({ x0, y0, x1, y1 })
     if (ids.length) state.select(ids, additive)
+  }
+
+  /**
+   * Angelpunkt des Zooms. Ein gewähltes Gebäude ist das, worum es gerade geht:
+   * es bleibt beim Zoomen stehen, wo es steht, und man fährt auf es zu statt
+   * auf den Mauszeiger. Ohne Gebäude in der Auswahl bleibt es beim
+   * übergebenen Punkt – Zeiger beim Rad, Bildmitte bei der Tastatur.
+   */
+  private zoomPivot(sx?: number, sy?: number): [number | undefined, number | undefined] {
+    const cam = this.ctx.camera
+    const buildings = this.ctx.state.selectedEntities().filter(e => e.kind === 'b')
+    if (!buildings.length) return [sx, sy]
+    const wx = buildings.reduce((sum, e) => sum + e.x, 0) / buildings.length
+    const wy = buildings.reduce((sum, e) => sum + e.y, 0) / buildings.length
+    const [px, py] = cam.worldToScreen(wx, wy)
+    // Hinter der Kamera oder weit daneben liefert die Projektion Ausreißer; ein
+    // solcher Angelpunkt würde die Karte wegschleudern. Am Bildrand festhalten
+    // zoomt in die Richtung, in der das Gebäude liegt.
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return [sx, sy]
+    return [Math.min(Math.max(px, 0), cam.width), Math.min(Math.max(py, 0), cam.height)]
   }
 
   /**

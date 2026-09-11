@@ -193,7 +193,7 @@ const canvas = {
   lineTo(x, y) { path.push([x, y]) },
   closePath() {}, stroke() { fills.push({ style: this.strokeStyle, path: path.slice() }) },
   fill() { fills.push({ style: this.fillStyle, path: path.slice() }) },
-  arc() {}, save() {}, restore() {}, translate() {}, rotate() {}, fillRect() {},
+  arc() {}, save() {}, restore() {}, translate() {}, rotate() {}, fillRect() {}, transform() {},
   createRadialGradient: () => ({ addColorStop() {} }), roundRect() {},
 }
 fx.decals.length = 0
@@ -222,4 +222,58 @@ fills.length = 0
 fx.drawDecals(canvas, view)
 assert.equal(fills.length, 0, 'nach einer Weile ist der Boden wieder unberührt')
 
-console.log('Ereigniseffekte bestanden: Mündungsfeuer nach Waffenart, Wasserfontänen, Flakwolken, Druckwellen, Wracks, Trümmer, Späne, Baumeldungen, Avatarverlust, Kielwasser, Kondensstreifen, Rotorabwind und Fahrspuren.')
+// --- Krater, Wracks und Trümmer ------------------------------------------------
+// Bodenzeichen liegen im Gelände statt darüber: derselbe Einschlag ist nah groß
+// und fern klein, und in der Schrägsicht wird er zur Ellipse.
+
+const marks = []
+let frame = null
+const ground = {
+  fillStyle: '', globalAlpha: 1,
+  save() {}, restore() {}, rotate() {}, translate() {},
+  transform(a, b, c, d, e, f) { frame = [a, b, c, d, e, f] },
+  beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {},
+  arc(x, y, r) { marks.push({ shape: 'arc', r, frame }) },
+  roundRect(x, y, w, h) { marks.push({ shape: 'rect', w, h, frame }) },
+  fillRect() {}, createRadialGradient: () => ({ addColorStop() {} }),
+}
+const across = (m) => Math.hypot(m.frame[0], m.frame[1])
+const along = (m) => Math.hypot(m.frame[2], m.frame[3])
+const paint = (cam) => { marks.length = 0; fx.drawDecals(ground, cam); return marks }
+
+fx.tracks.length = 0
+fx.decals.length = 0
+world.emit('state/event', { e: 'hit', x: X, y: Y + 260, w: 'shell', r: 90 })
+world.emit('state/event', { e: 'hit', x: X, y: Y - 260, w: 'shell', r: 90 })
+const craters = fx.decals.filter(d => d.kind === 'crater')
+assert.equal(craters.length, 2, 'zwei Einschläge, zwei Krater')
+
+const look = new Camera(new Context())
+look.resize(1280, 720)
+look.heightAt = () => 40
+look.perspective = true
+look.moveTo(X, Y, 0.8)
+const shown = paint(look).filter(m => m.shape === 'arc')
+assert.equal(shown.length, 2)
+assert.ok(shown.every(m => Math.abs(m.r - craters[0].r) < 1e-9), 'der Krater wird in Metern gezeichnet; der Maßstab steckt im Bodenrahmen')
+assert.ok(across(shown[0]) > across(shown[1]) * 1.5, 'derselbe Krater ist vorn deutlich größer als hinten')
+assert.ok(along(shown[0]) < across(shown[0]), 'in der Schrägsicht ist der Krater eine Ellipse, keine Scheibe')
+
+look.perspective = false
+const flat = paint(look).filter(m => m.shape === 'arc')
+assert.ok(flat.every(m => Math.abs(across(m) - 1 / look.mpp) < 1e-9 && Math.abs(along(m) - 1 / look.mpp) < 1e-9),
+  'in der Draufsicht bleibt der Krater rund und überall gleich groß')
+
+look.perspective = true
+look.moveTo(X, Y, 50)
+const distant = paint(look).filter(m => m.shape === 'arc')
+assert.ok(distant.every(m => across(m) * m.r >= 1.5 - 1e-9), 'aus großer Höhe bleibt vom Einschlag wenigstens ein sichtbarer Punkt')
+
+fx.decals.length = 0
+world.emit('state/event', { e: 'die', id: 5, x: X, y: Y, ty: 'mbt', k: 'u' })
+const hull = fx.decals.find(d => d.kind === 'wreck')
+look.moveTo(X, Y, 0.8)
+const wreck = paint(look).find(m => m.shape === 'rect')
+assert.ok(Math.abs(wreck.w - hull.w) < 1e-9 && Math.abs(wreck.h - hull.h) < 1e-9, 'auch das Wrack misst Meter und liegt flach im Gelände')
+
+console.log('Ereigniseffekte bestanden: Mündungsfeuer nach Waffenart, Wasserfontänen, Flakwolken, Druckwellen, Wracks, Trümmer, Späne, Baumeldungen, Avatarverlust, Kielwasser, Kondensstreifen, Rotorabwind, Fahrspuren und Bodenzeichen im Gelände.')

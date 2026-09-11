@@ -47,6 +47,107 @@ for (const forbidden of [/fetch\(/, /decodeAudioData/, /XMLHttpRequest/, /\.(mp3
   assert.ok(!forbidden.test(source), `Klänge entstehen im Browser, nicht aus Dateien (${forbidden})`)
 }
 
+// ---------------------------------------------------------------- Plausibilität
+
+/**
+ * Passt der Klang zur Sache? Die Werte hier stammen aus einer Messung im Browser
+ * (Analyser am Summenpunkt, jeder Klang einzeln, Stille dazwischen). Sie hat drei
+ * Fehler aufgedeckt, die man am Rezept nicht sieht:
+ *
+ *  1. Ein `highpass` lässt alles bis zur Hörgrenze durch. Die Knallschichten
+ *     lagen deshalb bei 8–10 kHz Schwerpunkt: eine Panzerkanone zischte, statt
+ *     zu schlagen. Seitdem sind Knalle bandbegrenzt.
+ *  2. Übersteuerung: Explosion und Atomschlag lagen über Vollaussteuerung, der
+ *     Begrenzer arbeitete dauerhaft.
+ *  3. Die Anlagenklänge lagen um den Faktor 20 auseinander – ein Förderband war
+ *     so laut wie ein sinkender Zerstörer.
+ *
+ * Die Kennwerte werden aus dem Rezept gerechnet (Näherung, aber sie folgt der
+ * Messung): `budget` = größte Summe gleichzeitiger Schichten, `helligkeit` =
+ * gewichteter Frequenzschwerpunkt, wobei ein Hochpass mit 2,5 gewichtet wird,
+ * weil er nach oben offen ist.
+ */
+const kennwerte = (rezept) => {
+  let dauer = 0
+  const stimmen = []
+  for (const l of rezept) for (let i = 0; i < (l.times ?? 1); i++) {
+    const at = (l.at ?? 0) + i * (l.gap ?? 0)
+    dauer = Math.max(dauer, at + l.dur)
+    const mitte = l.f1 === undefined ? l.f0 : Math.sqrt(l.f0 * l.f1)
+    const hz = l.wave !== 'noise' ? mitte
+      : l.filter === 'lowpass' ? mitte * 0.6
+      : l.filter === 'highpass' ? mitte * 2.5
+      : mitte
+    // Ein enges Band lässt nur einen Ausschnitt des Rauschens durch. Ohne diese
+    // Korrektur überschätzt die Rechnung schmalbandige Klänge um ein Vielfaches –
+    // die Messung im Browser hat genau das gezeigt.
+    const durchlass = l.wave === 'noise' && l.filter === 'bandpass' ? 1 / Math.sqrt(Math.max(1, l.q ?? 1)) : 1
+    stimmen.push({ at, bis: at + l.dur, gain: l.gain * durchlass, hz })
+  }
+  // Der Pegel eines Augenblicks, nicht die Summe aller Schichten, die einander
+  // irgendwo berühren: sonst zählt eine lange Schicht zwei kurze mit, die nie
+  // zugleich klingen.
+  let budget = 0
+  for (const punkt of stimmen.map(s => s.at)) {
+    budget = Math.max(budget, stimmen.filter(t => t.at <= punkt && t.bis > punkt).reduce((sum, t) => sum + t.gain, 0))
+  }
+  const summe = stimmen.reduce((a, s) => a + s.gain, 0)
+  return { budget, helligkeit: stimmen.reduce((a, s) => a + s.gain * s.hz, 0) / summe, dauer }
+}
+const mass = Object.fromEntries(Object.entries(CUES).map(([name, rezept]) => [name, kennwerte(rezept)]))
+const familie = (praefix) => Object.entries(mass).filter(([n]) => n.startsWith(praefix))
+
+// Nichts zischt. Das war der handfeste Befund der Messung.
+for (const [name, k] of Object.entries(mass)) {
+  assert.ok(k.helligkeit < 2500, `${name} liegt mit ${Math.round(k.helligkeit)} Hz im Zischbereich statt im Klang`)
+  // 50 Hz sind der Netzbrumm eines Transformators – tief, aber richtig.
+  assert.ok(k.helligkeit > 45, `${name} liegt mit ${Math.round(k.helligkeit)} Hz unter dem, was ein Lautsprecher noch zeigt`)
+  assert.ok(k.dauer <= 4.5, `${name} dauert ${k.dauer.toFixed(1)} s – das ist kein Ereignis mehr`)
+  assert.ok(k.budget <= 4.5, `${name} summiert ${k.budget.toFixed(1)} an Schichten und übersteuert sicher`)
+}
+
+// Was schwer ist, klingt tief und lang.
+for (const [name, k] of [...familie('explosion.'), ...familie('collapse'), ...familie('nuke'), ...familie('die.')]) {
+  assert.ok(k.helligkeit < 800, `${name}: schwere Ereignisse tragen unten, nicht bei ${Math.round(k.helligkeit)} Hz`)
+}
+for (const [name, k] of [...familie('explosion.'), ...familie('collapse'), ...familie('nuke')]) {
+  assert.ok(k.dauer >= 0.8, `${name} ist mit ${k.dauer.toFixed(2)} s zu kurz für eine Explosion`)
+  assert.ok(k.budget >= 1.5, `${name} muss die lauteste Gruppe sein, ist aber bei ${k.budget.toFixed(1)}`)
+}
+
+// Bedienung und Funk bleiben Randnotizen: kurz und leise.
+for (const [name, k] of [...familie('ui.'), ...familie('code.'), ...familie('radio.')]) {
+  assert.ok(k.budget <= 0.35, `${name} ist mit ${k.budget.toFixed(2)} zu laut für eine Rückmeldung`)
+  assert.ok(k.dauer <= 0.4, `${name} dauert ${k.dauer.toFixed(2)} s – eine Rückmeldung ist sofort vorbei`)
+}
+assert.ok(mass['ui.click'].dauer <= 0.1, 'ein Klick ist ein Klick')
+
+// Jede Waffe ist lauter als jede Rückmeldung und leiser als die schwersten Ereignisse.
+const lautesteBedienung = Math.max(...[...familie('ui.'), ...familie('code.'), ...familie('radio.')].map(([, k]) => k.budget))
+for (const [name, k] of familie('shot.')) {
+  assert.ok(k.budget > lautesteBedienung * 1.2, `${name} geht mit ${k.budget.toFixed(2)} in der Bedienung unter`)
+  assert.ok(k.budget < mass['explosion.large'].budget, `${name} darf nicht lauter sein als eine große Explosion`)
+}
+
+// Die Anlagen sind eine Familie: keine darf die andere übertönen.
+const anlagen = familie('plant.').map(([, k]) => k.budget)
+assert.ok(Math.max(...anlagen) / Math.min(...anlagen) <= 5,
+  `die Anlagen liegen um den Faktor ${(Math.max(...anlagen) / Math.min(...anlagen)).toFixed(1)} auseinander – vor der Messung waren es 20`)
+for (const [name, k] of familie('plant.')) {
+  assert.ok(k.budget < 0.8, `${name} ist mit ${k.budget.toFixed(2)} lauter als eine Kulisse sein darf`)
+  assert.ok(k.dauer <= 1.2, `${name} soll auffallen, nicht stehenbleiben`)
+}
+
+// Ein Knall fängt sofort an. Was anschwillt, ist ein Triebwerk, keine Explosion.
+const sofort = ['explosion.small', 'explosion.large', 'collapse', 'hit.small', 'hit.heavy', 'shot.bullet', 'shot.cannon', 'shot.shell']
+for (const name of sofort) {
+  const erste = CUES[name][0]
+  assert.ok((erste.attack ?? 0) <= 0.05, `${name} blendet mit ${erste.attack} s ein, statt zu knallen`)
+}
+for (const name of ['air.arrive', 'air.depart', 'shot.missile', 'missile.launch']) {
+  assert.ok((CUES[name][0].attack ?? 0) >= 0.1, `${name} muss anschwellen, nicht knallen`)
+}
+
 // ---------------------------------------------------------------- Aufbau
 
 const web = installWebAudio()
@@ -316,6 +417,71 @@ ctx.emit('render/frame', 1)
 assert.equal(wind.gain.value, 0, 'aus der Höhe verstummt auch die Umgebung')
 camera.moveTo(HOME_X, HOME_Y, 2)
 
+// ---------------------------------------------------------------- Eigener Klang je Sache
+
+// „Alles soll seinen eigenen Klang haben“ – das ist prüfbar: kein Rezept ohne
+// Anlass, kein Anlass, der sich den Klang einer anderen Sache borgt.
+const quelle = readFileSync(new URL('../client/audio.ts', import.meta.url), 'utf8')
+for (const name of cueNames) {
+  const treffer = quelle.split(name).length - 1
+  assert.ok(treffer >= 2, `${name} steht in der Tabelle, wird aber nirgends gespielt`)
+}
+const rollen = new Set(Object.values(DEFS).filter(d => d.kind === 'building').map(d => d.role))
+const stillErlaubt = new Set(['command', 'defense', undefined])
+for (const rolle of rollen) {
+  if (stillErlaubt.has(rolle)) continue
+  assert.ok(quelle.includes(`${rolle}: 'plant.`), `die Bauart ${rolle} arbeitet ohne eigenes Geräusch`)
+}
+
+// Jede Art zu sterben klingt anders.
+ac.advance(30)
+const tode = {}
+for (const [kind, type, label] of [['b', 'power', 'Gebäude'], ['u', 'mbt', 'Fahrzeug'], ['u', 'jet', 'Flugzeug'], ['u', 'destroyer', 'Schiff'], ['p', 'rifleman', 'Mensch']]) {
+  ac.advance(6)
+  audio.lastAt.clear()
+  fire({ e: 'die', id: 900, x: HOME_X, y: HOME_Y, ty: type, k: kind })
+  tode[label] = [...audio.lastAt.keys()].find(k => k !== 'alarm' && k !== 'radio' && !k.startsWith('code.')) ?? 'nichts'
+}
+assert.equal(new Set(Object.values(tode)).size, Object.keys(tode).length,
+  `jede Art zu sterben hat ihren eigenen Klang: ${JSON.stringify(tode)}`)
+assert.equal(tode['Flugzeug'], 'die.aircraft')
+assert.equal(tode['Schiff'], 'die.ship')
+
+// Ein Ende ohne Gewalt ist kein Verlust: Entfalten, Verkaufen, Erobern.
+ac.advance(30)
+audio.lastAt.clear()
+const friedlich = audio.playing
+fire({ e: 'die', owner: 7, id: 902, x: HOME_X, y: HOME_Y, ty: 'crawler', k: 'u', c: 'deploy' })
+assert.equal(since(friedlich), 0, 'die entfaltete Bauraupe explodiert nicht und schlägt keinen Alarm')
+ac.advance(5)
+plays('abfliegendes Landungsflugzeug', () => fire({ e: 'die', id: 903, x: HOME_X, y: HOME_Y, ty: 'dropship', k: 'u', c: 'departed' }))
+assert.ok([...audio.lastAt.keys()].includes('air.depart'), 'es zieht hörbar ab, statt zu verschwinden')
+
+// Jede Art zu erscheinen ebenso.
+ac.advance(10)
+const ankuenfte = {}
+for (const [type, label] of [['power', 'Gebäude'], ['command', 'Zentrale'], ['turret', 'Stellung'], ['dropship', 'Flugzeug']]) {
+  ac.advance(6)
+  audio.lastAt.clear()
+  fire({ e: 'placed', id: 901, x: HOME_X, y: HOME_Y, ty: type })
+  ankuenfte[label] = [...audio.lastAt.keys()][0] ?? 'nichts'
+}
+assert.equal(ankuenfte['Zentrale'], 'deploy', 'die Bauraupe entfaltet sich hörbar anders')
+assert.equal(ankuenfte['Flugzeug'], 'air.arrive')
+assert.notEqual(ankuenfte['Stellung'], ankuenfte['Gebäude'], 'eine Stellung wird anders verankert als ein Haus gesetzt')
+
+// Dieselbe Waffe, verschiedene Schützen: die Tonhöhe trennt sie.
+const tonhoehe = (type) => {
+  ac.advance(5)
+  state.entities.set(500, { id: 500, type, x: HOME_X, y: HOME_Y, kind: 'u', def: DEFS[type], speed: 0 })
+  const vorher = voices().length
+  fire({ e: 'shot', from: 500, x: HOME_X, y: HOME_Y, tx: HOME_X + 100, ty: HOME_Y, w: 'shell', ttl: 0.4 })
+  const neu = voices().slice(vorher).filter(q => q.kind === 'oscillator')
+  return neu.length ? neu[0].frequency.events[0].value : 0
+}
+const leicht = tonhoehe('lighttank'), schwer = tonhoehe('cruiser')
+assert.ok(leicht > schwer * 1.15, `ein leichter Panzer klingt heller als ein Kreuzer (${leicht.toFixed(0)} Hz gegen ${schwer.toFixed(0)} Hz)`)
+
 // ---------------------------------------------------------------- Maschinen
 
 // Was im Bild ist, hört man: Fahrzeuge brummen, Flugzeuge pfeifen, Anlagen summen.
@@ -354,6 +520,12 @@ state.homePosition = () => ({ x: HOME_X, y: HOME_Y })
 state.me = { prod: { structure: { type: 'power', ready: [], queue: [] } }, powerProd: 100, powerCons: 10 }
 ac.advance(5)
 plays('Baustelle', () => ctx.emit('render/frame', 1))
+// Ein Schlag alle zwei Sekunden, nicht vier je Sekunde.
+const schlaege = audio.playing
+for (let i = 0; i < 4; i++) ctx.emit('render/frame', 1)
+assert.equal(since(schlaege), 0, 'die Baustelle hämmert im eigenen Takt, nicht im Takt der Messung')
+ac.advance(3)
+plays('nächster Schlag', () => ctx.emit('render/frame', 1))
 state.me = { prod: {}, powerProd: 100, powerCons: 10 }
 ac.advance(5)
 const idle = audio.playing

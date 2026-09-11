@@ -73,7 +73,7 @@ interface Layer {
 const CUES = {
   // --- Waffen -------------------------------------------------------------
   'shot.bullet': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 2200, f1: 900, dur: 0.05, gain: 0.5, q: 0.7 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2200, f1: 900, dur: 0.05, gain: 0.6, q: 0.7 },
     { wave: 'square', f0: 220, f1: 90, dur: 0.05, gain: 0.18 },
   ],
   'shot.cannon': [
@@ -81,13 +81,13 @@ const CUES = {
     { wave: 'square', f0: 160, f1: 70, dur: 0.1, gain: 0.28 },
   ],
   'shot.shell': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 5000, f1: 1800, dur: 0.03, gain: 0.7 },
-    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1100, f1: 120, dur: 0.55, gain: 0.9 },
-    { wave: 'sine', f0: 95, f1: 34, dur: 0.6, gain: 0.75 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2600, f1: 1200, dur: 0.04, gain: 0.5, q: 0.8 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1100, f1: 120, dur: 0.55, gain: 0.75 },
+    { wave: 'sine', f0: 95, f1: 34, dur: 0.6, gain: 0.6 },
     { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 320, f1: 110, dur: 0.9, gain: 0.3, at: 0.09, attack: 0.06 },
   ],
   'shot.rocket': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 4000, f1: 2000, dur: 0.03, gain: 0.4 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2400, f1: 1400, dur: 0.04, gain: 0.22, q: 1 },
     { wave: 'sine', f0: 130, f1: 55, dur: 0.25, gain: 0.5 },
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 380, f1: 2600, dur: 0.8, gain: 0.6, q: 0.5, attack: 0.05 },
   ],
@@ -109,10 +109,11 @@ const CUES = {
     { wave: 'noise', color: 'white', filter: 'bandpass', f0: 900, dur: 0.04, gain: 0.12, q: 4, times: 5, gap: 0.13 },
   ],
   'shot.melee': [
-    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 800, f1: 260, dur: 0.14, gain: 0.3, q: 0.8, attack: 0.03 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 800, f1: 260, dur: 0.14, gain: 0.45, q: 0.8, attack: 0.03 },
+    { wave: 'triangle', f0: 300, f1: 160, dur: 0.12, gain: 0.16 },
   ],
   'shot.arrow': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 2600, f1: 1400, dur: 0.06, gain: 0.22 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 1600, f1: 900, dur: 0.06, gain: 0.26, q: 1.2 },
     { wave: 'triangle', f0: 900, f1: 380, dur: 0.1, gain: 0.16 },
   ],
   'shot.nuke': [
@@ -123,7 +124,7 @@ const CUES = {
   // --- Treffer und Zerstörung ---------------------------------------------
   'hit.small': [
     { wave: 'triangle', f0: 1500, f1: 620, dur: 0.09, gain: 0.28 },
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 3200, dur: 0.05, gain: 0.2 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2600, dur: 0.05, gain: 0.22, q: 1.4 },
   ],
   'hit.heavy': [
     { wave: 'sine', f0: 170, f1: 48, dur: 0.3, gain: 0.6 },
@@ -131,44 +132,83 @@ const CUES = {
     { wave: 'triangle', f0: 1900, f1: 1200, dur: 0.35, gain: 0.14, attack: 0.004 },
   ],
   'hit.water': [
-    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 400, f1: 2000, dur: 0.22, gain: 0.4, q: 0.6 },
-    { wave: 'noise', color: 'pink', filter: 'lowpass', f0: 1200, f1: 300, dur: 0.5, gain: 0.28, attack: 0.05 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 400, f1: 1800, dur: 0.25, gain: 0.6, q: 0.6 },
+    { wave: 'noise', color: 'pink', filter: 'lowpass', f0: 1200, f1: 300, dur: 0.6, gain: 0.45, attack: 0.05 },
+    { wave: 'sine', f0: 150, f1: 60, dur: 0.4, gain: 0.3 },
   ],
   'explosion.small': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 6000, f1: 1400, dur: 0.04, gain: 0.75 },
-    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1600, f1: 80, dur: 0.8, gain: 0.95 },
-    { wave: 'sine', f0: 110, f1: 30, dur: 0.9, gain: 0.7 },
-    { wave: 'sine', f0: 62, f1: 22, dur: 1.1, gain: 0.5, attack: 0.02 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2800, f1: 1000, dur: 0.05, gain: 0.45, q: 0.7 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1600, f1: 80, dur: 0.8, gain: 0.7 },
+    { wave: 'sine', f0: 110, f1: 30, dur: 0.9, gain: 0.5 },
+    { wave: 'sine', f0: 62, f1: 22, dur: 1.1, gain: 0.35, attack: 0.02 },
   ],
   'explosion.large': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 7000, f1: 900, dur: 0.05, gain: 0.85 },
-    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1900, f1: 55, dur: 1.7, gain: 1 },
-    { wave: 'sine', f0: 85, f1: 22, dur: 1.9, gain: 0.85 },
-    { wave: 'sine', f0: 48, f1: 18, dur: 2.4, gain: 0.6, attack: 0.03 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 3000, f1: 800, dur: 0.06, gain: 0.5, q: 0.6 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1900, f1: 55, dur: 1.7, gain: 0.75 },
+    { wave: 'sine', f0: 85, f1: 22, dur: 1.9, gain: 0.6 },
+    { wave: 'sine', f0: 48, f1: 18, dur: 2.4, gain: 0.45, attack: 0.03 },
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1300, dur: 0.09, gain: 0.2, q: 2, times: 7, gap: 0.13, at: 0.3 },
     { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 260, f1: 90, dur: 1.6, gain: 0.35, at: 0.5, attack: 0.25 },
   ],
   'collapse': [
-    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1200, f1: 60, dur: 1.4, gain: 0.9 },
-    { wave: 'sine', f0: 95, f1: 26, dur: 1.5, gain: 0.7 },
-    { wave: 'sine', f0: 52, f1: 20, dur: 2, gain: 0.45, attack: 0.05 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1200, f1: 60, dur: 1.4, gain: 0.7 },
+    { wave: 'sine', f0: 95, f1: 26, dur: 1.5, gain: 0.5 },
+    { wave: 'sine', f0: 52, f1: 20, dur: 2, gain: 0.35, attack: 0.05 },
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1100, f1: 500, dur: 0.14, gain: 0.28, q: 1.6, times: 10, gap: 0.1, at: 0.18 },
   ],
   'die.person': [
     { wave: 'sine', f0: 140, f1: 55, dur: 0.24, gain: 0.32 },
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1400, f1: 800, dur: 0.07, gain: 0.14, q: 1.4, times: 2, gap: 0.09 },
   ],
+  // Ein abgeschossenes Flugzeug fällt, bevor es aufschlägt.
+  'die.aircraft': [
+    { wave: 'sine', f0: 1500, f1: 240, dur: 1.4, gain: 0.3, attack: 0.06 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1200, f1: 400, dur: 1.4, gain: 0.28, q: 0.7, attack: 0.1 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1400, f1: 70, dur: 1, gain: 0.7, at: 1.35 },
+    { wave: 'sine', f0: 95, f1: 26, dur: 1.2, gain: 0.5, at: 1.35 },
+  ],
+  // Ein sinkendes Schiff: berstendes Metall, dann Wasser.
+  'die.ship': [
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1200, f1: 80, dur: 1.2, gain: 0.8 },
+    { wave: 'triangle', f0: 210, f1: 70, dur: 1.6, gain: 0.3, attack: 0.15 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 500, f1: 1900, dur: 1.8, gain: 0.4, q: 0.5, attack: 0.5, at: 0.5 },
+    { wave: 'noise', color: 'pink', filter: 'lowpass', f0: 900, f1: 220, dur: 2.2, gain: 0.3, attack: 0.6, at: 0.9 },
+  ],
   'nuke': [
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 6000, f1: 700, dur: 0.15, gain: 0.6 },
-    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1800, f1: 40, dur: 3.5, gain: 1 },
-    { wave: 'sine', f0: 60, f1: 18, dur: 4, gain: 0.8 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2200, f1: 600, dur: 0.18, gain: 0.4, q: 0.5 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 1800, f1: 40, dur: 3.5, gain: 0.8 },
+    { wave: 'sine', f0: 60, f1: 18, dur: 4, gain: 0.7 },
     { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 300, f1: 60, dur: 2.5, gain: 0.45, at: 1.2, attack: 0.6 },
   ],
 
   // --- Aufbau und Wirtschaft ----------------------------------------------
+  // Die Bauraupe entfaltet sich zur Kommandozentrale: Hydraulik, dann Verriegelung.
+  'deploy': [
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 600, f1: 1500, dur: 1.1, gain: 0.3, q: 0.7, attack: 0.25 },
+    { wave: 'sawtooth', f0: 70, f1: 130, dur: 1.2, gain: 0.28, attack: 0.3 },
+    { wave: 'square', f0: 320, f1: 140, dur: 0.12, gain: 0.3, at: 1.15 },
+    { wave: 'sine', f0: 120, f1: 50, dur: 0.4, gain: 0.4, at: 1.18 },
+  ],
+  // Eine Stellung wird gesetzt: Beton und Verankerung statt Baustellenklang.
+  'place.defense': [
+    { wave: 'sine', f0: 140, f1: 55, dur: 0.35, gain: 0.45 },
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 700, f1: 200, dur: 0.4, gain: 0.35 },
+    { wave: 'square', f0: 260, f1: 180, dur: 0.07, gain: 0.2, times: 2, gap: 0.13, at: 0.3 },
+  ],
+  // Abriss: Trennschleifer, dann fällt das Blech.
+  'sell': [
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 3200, f1: 2200, dur: 0.5, gain: 0.26, q: 3, attack: 0.05 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 900, f1: 400, dur: 0.12, gain: 0.24, q: 1.5, times: 4, gap: 0.12, at: 0.45 },
+    { wave: 'sine', f0: 110, f1: 40, dur: 0.6, gain: 0.35, at: 0.5 },
+  ],
+  // Reparatur: Schweißen und Hammerschlag.
+  'repair': [
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2600, dur: 0.09, gain: 0.2, q: 4, times: 3, gap: 0.1 },
+    { wave: 'triangle', f0: 520, f1: 300, dur: 0.12, gain: 0.2, at: 0.32 },
+  ],
   'place': [
     { wave: 'square', f0: 300, f1: 130, dur: 0.12, gain: 0.3 },
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 1800, f1: 600, dur: 0.45, gain: 0.22, attack: 0.02 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 1400, f1: 500, dur: 0.45, gain: 0.24, q: 0.8, attack: 0.02 },
   ],
   'build.done': [
     { wave: 'sine', f0: 660, dur: 0.2, gain: 0.3, attack: 0.01 },
@@ -188,10 +228,10 @@ const CUES = {
   ],
   'gather.ore': [
     { wave: 'triangle', f0: 1900, f1: 900, dur: 0.14, gain: 0.24 },
-    { wave: 'noise', color: 'white', filter: 'highpass', f0: 3400, dur: 0.06, gain: 0.18 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2800, dur: 0.06, gain: 0.2, q: 2 },
   ],
   'gather.soft': [
-    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 3000, f1: 2200, dur: 0.3, gain: 0.2, q: 0.7, attack: 0.06 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 2400, f1: 1700, dur: 0.3, gain: 0.35, q: 0.7, attack: 0.06 },
   ],
   'work': [
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1600, f1: 700, dur: 0.07, gain: 0.3, q: 1.6 },
@@ -207,6 +247,60 @@ const CUES = {
     // Der Aufsetzer: kurzes Quietschen und ein satter Schlag.
     { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2600, f1: 1200, dur: 0.35, gain: 0.3, q: 2.2, at: 2.9 },
     { wave: 'sine', f0: 90, f1: 38, dur: 0.5, gain: 0.5, at: 2.95 },
+  ],
+  // --- Anlagen bei der Arbeit ---------------------------------------------
+  // Jede Bauart hat ihr eigenes Geräusch, sonst ist eine Basis ein einziges
+  // Summen. Sie kommen selten und leise, dafür erkennbar.
+  'plant.power': [
+    { wave: 'sawtooth', f0: 100, dur: 0.5, gain: 0.076, attack: 0.08 },
+    { wave: 'sine', f0: 50, dur: 0.6, gain: 0.092, attack: 0.1 },
+  ],
+  // Ein enges Band verschluckt viel Energie: gemessen kam bei Q 2 nur ein
+  // Zehntel des nominellen Pegels an. Deshalb breiter und lauter angesetzt.
+  'plant.refinery': [
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 800, f1: 500, dur: 0.09, gain: 0.55, q: 1, times: 4, gap: 0.22 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1400, dur: 0.5, gain: 0.22, q: 0.7, attack: 0.1, at: 0.5 },
+  ],
+  'plant.factory': [
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 900, f1: 200, dur: 0.18, gain: 0.192 },
+    { wave: 'sine', f0: 130, f1: 60, dur: 0.25, gain: 0.16 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 2000, dur: 0.3, gain: 0.064, q: 1, attack: 0.04, at: 0.24 },
+  ],
+  'plant.radar': [
+    { wave: 'sine', f0: 1400, f1: 2100, dur: 0.09, gain: 0.18, attack: 0.01 },
+    { wave: 'sine', f0: 900, dur: 0.06, gain: 0.108, at: 0.42 },
+  ],
+  'plant.shipyard': [
+    { wave: 'triangle', f0: 300, f1: 210, dur: 0.12, gain: 0.168, times: 3, gap: 0.3 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1600, dur: 0.06, gain: 0.096, q: 3, times: 2, gap: 0.45, at: 0.15 },
+  ],
+  'plant.repair': [
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2000, dur: 0.07, gain: 0.4, q: 4, times: 4, gap: 0.14 },
+    { wave: 'triangle', f0: 420, f1: 300, dur: 0.1, gain: 0.1, at: 0.42 },
+  ],
+  'plant.tech': [
+    { wave: 'sine', f0: 1200, dur: 0.05, gain: 0.175 },
+    { wave: 'sine', f0: 1600, dur: 0.05, gain: 0.175, at: 0.12 },
+    { wave: 'sine', f0: 980, dur: 0.07, gain: 0.15, at: 0.26 },
+  ],
+  'plant.barracks': [
+    { wave: 'square', f0: 620, f1: 880, dur: 0.14, gain: 0.18, attack: 0.02 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 900, dur: 0.05, gain: 0.14, q: 2.5, times: 3, gap: 0.16, at: 0.2 },
+  ],
+  // Ziviles Viertel: Stimmen, Karren, Türen – gedämpft und weit weg.
+  'plant.civil': [
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 420, f1: 620, dur: 0.9, gain: 0.225, q: 0.7, attack: 0.3 },
+    { wave: 'triangle', f0: 260, f1: 180, dur: 0.1, gain: 0.15, at: 0.55 },
+  ],
+  'plant.airfield': [
+    { wave: 'sawtooth', f0: 220, f1: 380, dur: 0.9, gain: 0.18, attack: 0.35 },
+    { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1600, f1: 2200, dur: 0.9, gain: 0.12, q: 1.2, attack: 0.4 },
+  ],
+  // Abflug: die Triebwerke ziehen weg, statt dass etwas explodiert.
+  'air.depart': [
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 800, f1: 160, dur: 3, gain: 0.55, attack: 0.25 },
+    { wave: 'sawtooth', f0: 92, f1: 54, dur: 3, gain: 0.3, attack: 0.2 },
+    { wave: 'sawtooth', f0: 400, f1: 190, dur: 2.6, gain: 0.16, attack: 0.3 },
   ],
   'unit.ready': [
     { wave: 'square', f0: 523, dur: 0.12, gain: 0.18, attack: 0.01 },
@@ -338,7 +432,10 @@ const THROTTLE: Partial<Record<Cue, number>> = {
   'hit.small': 0.05, 'hit.heavy': 0.07, 'hit.water': 0.12,
   'explosion.small': 0.07, 'explosion.large': 0.12, 'collapse': 0.25, 'die.person': 0.12, 'nuke': 3,
   'gather.wood': 0.12, 'gather.stone': 0.12, 'gather.ore': 0.12, 'gather.soft': 0.2,
-  'place': 0.15, 'build.done': 0.3, 'work': 0.35, 'air.arrive': 4, 'capture': 0.5, 'unit.ready': 0.4, 'arrive': 0.6, 'knowledge': 0.5,
+  'place': 0.15, 'place.defense': 0.15, 'build.done': 0.3, 'work': 0.35, 'air.arrive': 4,
+  'deploy': 2, 'sell': 0.4, 'repair': 0.5, 'die.aircraft': 0.3, 'die.ship': 0.5, 'air.depart': 3,
+  'plant.power': 0.8, 'plant.refinery': 0.8, 'plant.factory': 0.8, 'plant.radar': 0.8, 'plant.shipyard': 0.8,
+  'plant.repair': 0.8, 'plant.tech': 0.8, 'plant.barracks': 0.8, 'plant.airfield': 0.8, 'plant.civil': 0.8, 'capture': 0.5, 'unit.ready': 0.4, 'arrive': 0.6, 'knowledge': 0.5,
   'alarm': 12, 'missile.launch': 2, 'missile.inbound': 4, 'power.low': 20, 'milestone': 2, 'avatar.down': 2, 'spawn': 5,
   'start.infantry': 0.08, 'start.vehicle': 0.12, 'start.aircraft': 0.12, 'start.ship': 0.12, 'start.building': 0.12,
   'radio.open': 0.25, 'radio.close': 0.05, 'radio.deny': 0.5,
@@ -351,11 +448,25 @@ const SHOT: Record<string, Cue> = {
   flak: 'shot.flak', bomb: 'shot.bomb', torpedo: 'shot.torpedo', melee: 'shot.melee', arrow: 'shot.arrow', nuke: 'shot.nuke',
 }
 /** Welche Ansage zu welcher Befehlsart gehört. */
+/** Arbeitsgeräusch je Bauart. Rollen ohne Eintrag arbeiten lautlos. */
+const PLANT_WORK: Record<string, Cue> = {
+  power: 'plant.power', refinery: 'plant.refinery', factory: 'plant.factory', radar: 'plant.radar',
+  shipyard: 'plant.shipyard', repair: 'plant.repair', tech: 'plant.tech', barracks: 'plant.barracks',
+  airfield: 'plant.airfield', civilian: 'plant.civil',
+}
+
 const ORDER_VOICE: Record<string, VoiceEvent> = {
   move: 'move', attackmove: 'move', attack: 'attack', fire: 'attack',
   harvest: 'work', capture: 'capture', load: 'load', unload: 'unload',
-  rally: 'rally', stop: 'hold', guard: 'hold', hold: 'hold', return: 'move',
+  rally: 'rally', stop: 'hold', guard: 'hold', hold: 'hold', return: 'move', deploy: 'work',
 }
+
+/**
+ * Tonhöhe nach Größe des Verursachers. So teilen sich elf Waffenrezepte auf über
+ * dreißig Einheiten auf, ohne dass zwei gleich klingen: ein Sturmgewehr (1,5 m)
+ * liegt hoch, das Geschütz eines Kreuzers (20 m) tief.
+ */
+const sizeRate = (size: number | undefined) => clamp(1.45 - (size ?? 5) / 16, 0.7, 1.45)
 
 /** Leichte Waffen ticken, schwere schlagen ein. */
 const LIGHT_WARHEAD = new Set(['bullet', 'cannon', 'flak', 'arrow', 'melee'])
@@ -441,6 +552,11 @@ export interface PlayOptions {
   /** Eigener Drosselschlüssel, wenn mehrere Anlässe denselben Klang teilen. */
   key?: string
   bus?: Bus
+  /**
+   * Tonhöhenfaktor. Damit teilt sich ein Rezept auf viele Quellen auf: dasselbe
+   * Mündungsfeuer klingt bei einem Gewehr hoch und bei einem Bunker-MG tief.
+   */
+  rate?: number
 }
 
 /**
@@ -486,6 +602,9 @@ export class Audio extends Service {
   private nextWave = 0
   private lastOrderKind = ''
   private lastOrderAt = -Infinity
+  /** Wann das nächste Arbeitsgeräusch eines Gebäudes fällig ist. */
+  private plantAt = new Map<number, number>()
+  private workAt = 0
 
   constructor(ctx: Context) {
     super(ctx, 'audio')
@@ -537,6 +656,9 @@ export class Audio extends Service {
 
   /** Gerade klingende Stimmen – Grundlage des Budgets und der Prüfung. */
   get playing() { return this.voices }
+
+  /** Die Rezepttabelle, für Prüfung und Fehlersuche im Browser. */
+  get catalogue(): Readonly<Record<string, Layer[]>> { return CUES }
 
   /** Schaltet den Ton um und liefert den neuen Stand für die Beschriftung. */
   toggle(on = !this.settings.on) {
@@ -618,7 +740,7 @@ export class Audio extends Service {
     if (this.voices >= MAX_VOICES) return false
     this.lastAt.set(key, now)
     if (this.lastAt.size > 400) this.lastAt.clear()
-    this.spawn(recipe, this.buses![bus], gain, pan, delay, cutoff)
+    this.spawn(recipe, this.buses![bus], gain, pan, delay, cutoff, opts.rate ?? 1)
     return true
   }
 
@@ -649,7 +771,7 @@ export class Audio extends Service {
 
   // ------------------------------------------------------------- Abspieler
 
-  private spawn(recipe: Layer[], bus: GainNode, level: number, pan: number, delay: number, cutoff: number) {
+  private spawn(recipe: Layer[], bus: GainNode, level: number, pan: number, delay: number, cutoff: number, rate = 1) {
     const ac = this.ac!
     const start = ac.currentTime + delay
     const out = ac.createGain()
@@ -669,7 +791,7 @@ export class Audio extends Service {
     tail.connect(bus)
     // Alle Schichten eines Klangs teilen dieselbe kleine Verstimmung, sonst
     // klingt derselbe Schuss jedes Mal wie aus derselben Konserve.
-    const tune = 1 + (Math.random() - 0.5) * 0.1
+    const tune = (1 + (Math.random() - 0.5) * 0.1) * (rate > 0 ? rate : 1)
     const sources: AudioScheduledSourceNode[] = []
     for (const layer of recipe) {
       for (let i = 0; i < (layer.times ?? 1); i++) {
@@ -857,11 +979,24 @@ export class Audio extends Service {
     // Anlagen summen. Gezählt wird viermal je Sekunde, nicht je Bild.
     let traffic = 0, air = 0, plant = 0, working = false
     const state = this.ctx.state
+    const now = this.ac.currentTime
+    if (this.plantAt.size > 600) this.plantAt.clear()
     if (near > 0 && state) {
       const view = cam.viewRect()
       for (const e of state.entities.values()) {
         if (e.ghost || !e.def || e.x < view.x0 || e.x > view.x1 || e.y < view.y0 || e.y > view.y1) continue
-        if (e.kind === 'b') { if (!e.off) plant++ }
+        if (e.kind === 'b') {
+          if (!e.off) plant++
+          // Jede Bauart arbeitet hörbar anders. Je Gebäude selten, zusammen
+          // gedrosselt: eine Basis lebt, statt zu dröhnen.
+          if (!e.off && e.hp > 0) {
+            const cue = PLANT_WORK[(e.def as { role?: string }).role ?? '']
+            if (cue && now >= (this.plantAt.get(e.id) ?? 0)) {
+              this.plantAt.set(e.id, now + 5 + Math.random() * 6)
+              this.play(cue, { x: e.x, y: e.y, key: 'plant.work', gain: 0.9 })
+            }
+          }
+        }
         else if (e.kind === 'u') {
           const domain = (e.def as { domain?: string }).domain
           if (domain === 'air') air++
@@ -880,8 +1015,11 @@ export class Audio extends Service {
     this.ramp(this.beds.traffic, near * share(traffic, 8) * 0.45)
     this.ramp(this.beds.air, near * share(air, 3) * 0.4)
     this.ramp(this.beds.plant, near * share(plant, 10) * 0.25)
-    if (working) {
+    // Hämmern im Takt einer Baustelle, nicht im Takt der Messung: alle zwei
+    // Sekunden ein Schlag statt viermal je Sekunde.
+    if (working && now >= this.workAt) {
       const home = state?.homePosition?.()
+      this.workAt = now + 1.6 + Math.random()
       if (home) this.play('work', { x: home.x, y: home.y, gain: 0.7 + Math.random() * 0.5 })
     }
   }
@@ -896,9 +1034,11 @@ export class Audio extends Service {
 
   private onEvent(ev: GameEvent) {
     switch (ev.e) {
-      case 'shot':
-        this.play(SHOT[ev.w] ?? 'shot.bullet', { x: ev.x, y: ev.y })
+      case 'shot': {
+        const shooter = this.ctx.state?.entities.get(ev.from)
+        this.play(SHOT[ev.w] ?? 'shot.bullet', { x: ev.x, y: ev.y, rate: sizeRate(shooter?.def?.size) })
         break
+      }
       case 'hit': {
         if (ev.r > 0) { this.play(ev.r >= 60 ? 'explosion.large' : 'explosion.small', { x: ev.x, y: ev.y }); break }
         if (this.ctx.terrain?.isWater(ev.x, ev.y)) { this.play('hit.water', { x: ev.x, y: ev.y }); break }
@@ -906,9 +1046,24 @@ export class Audio extends Service {
         break
       }
       case 'die': {
-        const size = DEFS[ev.ty]?.size ?? 5
-        const cue: Cue = ev.k === 'b' ? 'collapse' : ev.k === 'p' || ev.k === 'a' ? 'die.person' : size >= 6 ? 'explosion.large' : 'explosion.small'
-        this.play(cue, { x: ev.x, y: ev.y, gain: clamp(0.6 + size / 30, 0.6, 1.3) })
+        const def = DEFS[ev.ty]
+        // `c` steht für jedes Ende ohne Gewalt: entfalten, verkaufen, erobern,
+        // abfliegen. Ohne diese Zeile klang das Entfalten der Bauraupe wie ein
+        // Totalverlust samt Alarm – gemessen im Spiel.
+        if (ev.c) {
+          if (ev.c === 'departed' && def?.category === 'aircraft') this.play('air.depart', { x: ev.x, y: ev.y })
+          break
+        }
+        const size = def?.size ?? 5
+        const domain = (def as { domain?: string } | undefined)?.domain
+        // Jede Art geht anders unter: Gebäude stürzen ein, Flugzeuge fallen,
+        // Schiffe sinken, Menschen fallen, Fahrzeuge bersten.
+        const cue: Cue = ev.k === 'b' ? 'collapse'
+          : ev.k === 'p' || ev.k === 'a' ? 'die.person'
+          : domain === 'air' ? 'die.aircraft'
+          : domain === 'sea' ? 'die.ship'
+          : size >= 6 ? 'explosion.large' : 'explosion.small'
+        this.play(cue, { x: ev.x, y: ev.y, gain: clamp(0.6 + size / 30, 0.6, 1.3), rate: sizeRate(size) })
         // Eigene Verluste melden sich einmal je Angriffswelle, nicht je Treffer.
         if (ev.owner !== undefined && ev.owner === this.ctx.state?.myId) {
           this.cue('alarm')
@@ -917,10 +1072,15 @@ export class Audio extends Service {
         break
       }
       case 'placed': {
-        // Ein Landungsflugzeug setzt nicht auf wie eine Baustelle gesetzt wird.
+        // Jede Art zu erscheinen klingt anders: das Landungsflugzeug setzt auf,
+        // die Bauraupe entfaltet sich, eine Stellung wird verankert, der Rest
+        // wird gesetzt.
         const def = DEFS[ev.ty]
-        if (def?.category === 'aircraft') { this.play('air.arrive', { x: ev.x, y: ev.y, gain: 1.2 }); break }
-        this.play('place', { x: ev.x, y: ev.y })
+        const cue: Cue = def?.category === 'aircraft' ? 'air.arrive'
+          : (def as { role?: string } | undefined)?.role === 'command' ? 'deploy'
+          : def?.category === 'defense' ? 'place.defense'
+          : 'place'
+        this.play(cue, { x: ev.x, y: ev.y, gain: cue === 'air.arrive' ? 1.2 : 1, rate: cue === 'place' ? sizeRate(def?.size) : 1 })
         break
       }
       case 'capture': {
@@ -982,7 +1142,11 @@ export class Audio extends Service {
    * den kurzen Klang – erst der Wechsel ist eine Ansage wert.
    */
   private onOrder(ids: number[], kind: string) {
-    this.cue('ui.order')
+    // Entfalten ist kein gewöhnlicher Befehl: die Bauraupe wird zur Zentrale.
+    if (kind === 'deploy') {
+      const e = this.ctx.state?.entities.get(ids[0])
+      this.play('deploy', e ? { x: e.x, y: e.y } : {})
+    } else this.cue('ui.order')
     const event = ORDER_VOICE[kind]
     if (!event) return
     const state = this.ctx.state

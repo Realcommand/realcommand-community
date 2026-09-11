@@ -417,14 +417,13 @@ export class Effects extends Service {
   drawDecals(g: CanvasRenderingContext2D, cam: Camera) {
     const project=cam.projector()
     if (cam.mpp > 60) return
-    const pxPerM = 1 / cam.mpp
     if (cam.mpp < 6) {
       // Die Spur liegt auf dem Boden. Kettenabstand und Kettenbreite stehen in
       // Metern und werden mitprojiziert: fern wird die Spur schmal wie das
       // Gelände darunter, nah breit. Je Blendstufe entsteht ein einziger Pfad,
       // denn getrennt gefüllte Stöße decken sich doppelt und machen aus der
       // Spur eine Perlenkette.
-      const levels = new Map<number, number[][]>()
+      const levels = new Map<number, number[]>()
       for (const t of this.tracks) {
         const dx = t.x1 - t.x0, dy = t.y1 - t.y0, len = Math.hypot(dx, dy) || 1
         // Eine halbe Kettenbreite Überstand je Ende: in Kurven bleibt zwischen
@@ -444,20 +443,20 @@ export class Effects extends Service {
         const uax = (lax - ax) / pa, uay = (lay - ay) / pa, ubx = (lbx - bx) / pb, uby = (lby - by) / pb
         const ra = Math.max(0.4, pa * t.rail), rb = Math.max(0.4, pb * t.rail)
         const step = Math.max(1, Math.ceil(Math.min(1, (t.ttl - t.t) / 12) * 5))
-        let quads = levels.get(step)
-        if (!quads) levels.set(step, quads = [])
+        let corners = levels.get(step)
+        if (!corners) levels.set(step, corners = [])
         for (const side of [-1, 1]) {
           const ca = pa * t.gauge * side, cb = pb * t.gauge * side
-          quads.push([ax + uax * (ca - ra), ay + uay * (ca - ra), bx + ubx * (cb - rb), by + uby * (cb - rb),
-            bx + ubx * (cb + rb), by + uby * (cb + rb), ax + uax * (ca + ra), ay + uay * (ca + ra)])
+          corners.push(ax + uax * (ca - ra), ay + uay * (ca - ra), bx + ubx * (cb - rb), by + uby * (cb - rb),
+            bx + ubx * (cb + rb), by + uby * (cb + rb), ax + uax * (ca + ra), ay + uay * (ca + ra))
         }
       }
-      for (const [step, quads] of levels) {
+      for (const [step, corners] of levels) {
         g.fillStyle = `rgba(35,30,22,${step / 5 * 0.3})`
         g.beginPath()
-        for (const q of quads) {
-          g.moveTo(q[0], q[1])
-          for (let i = 2; i < q.length; i += 2) g.lineTo(q[i], q[i + 1])
+        for (let i = 0; i < corners.length; i += 8) {
+          g.moveTo(corners[i], corners[i + 1])
+          for (let c = 2; c < 8; c += 2) g.lineTo(corners[i + c], corners[i + c + 1])
           g.closePath()
         }
         g.fill()
@@ -465,34 +464,49 @@ export class Effects extends Service {
     }
     for (const d of this.decals) {
       const fade = Math.min(1, (d.ttl - d.t) / 15)
-      const [sx, sy] = project(d.x, d.y)
+      const ground = cam.heightAt(d.x, d.y)
+      const [sx, sy] = project(d.x, d.y, ground)
       if (sx < -100 || sy < -100 || sx > cam.width + 100 || sy > cam.height + 100) continue
+      // Der Bodenrahmen an dieser Stelle: je ein Meter nach Osten und nach
+      // Süden, projiziert. Unter dieser Abbildung wird in Metern gezeichnet –
+      // ein Krater liegt dann flach im Gelände und wird mit der Entfernung
+      // kleiner, statt als gleich großer Kreis über der Landschaft zu schweben.
+      const [ex, ey] = project(d.x + 1, d.y, ground)
+      const [nx, ny] = project(d.x, d.y + 1, ground)
+      let ux = ex - sx, uy = ey - sy, vx = nx - sx, vy = ny - sy
+      // Aus großer Höhe bliebe vom Einschlag ein unsichtbarer Punkt. Ein paar
+      // Pixel Mindestmaß halten fest, wo gekämpft wurde.
+      const reach = d.kind === 'wreck' ? Math.max(d.w, d.h) / 2 : d.r
+      const least = d.kind === 'crater' ? 1.5 : 3
+      const drawn = Math.hypot(ux, uy) * reach
+      if (drawn < least) {
+        const grow = least / Math.max(drawn, 1e-6)
+        ux *= grow; uy *= grow; vx *= grow; vy *= grow
+      }
+      g.save()
+      g.transform(ux, uy, vx, vy, sx, sy)
       if (d.kind === 'crater') {
-        const r = Math.max(1.5, d.r * pxPerM)
-        const gr = g.createRadialGradient(sx, sy, r * 0.2, sx, sy, r)
+        const gr = g.createRadialGradient(0, 0, d.r * 0.2, 0, 0, d.r)
         gr.addColorStop(0, `rgba(20,16,12,${0.55 * fade})`)
         gr.addColorStop(0.7, `rgba(35,28,20,${0.35 * fade})`)
         gr.addColorStop(1, 'rgba(35,28,20,0)')
         g.fillStyle = gr
-        g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill()
+        g.beginPath(); g.arc(0, 0, d.r, 0, Math.PI * 2); g.fill()
       } else if (d.kind === 'wreck') {
-        g.save()
-        g.translate(sx, sy)
         g.rotate(d.heading)
         g.globalAlpha = 0.85 * fade
-        const w = Math.max(6, d.w * pxPerM), h = Math.max(4, d.h * pxPerM)
         g.fillStyle = '#1f1d1a'
-        g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, h * 0.2); g.fill()
+        g.beginPath(); g.roundRect(-d.w / 2, -d.h / 2, d.w, d.h, d.h * 0.2); g.fill()
         g.fillStyle = '#3a342c'
-        g.fillRect(-w * 0.3, -h * 0.3, w * 0.5, h * 0.6)
-        g.restore()
+        g.fillRect(-d.w * 0.3, -d.h * 0.3, d.w * 0.5, d.h * 0.6)
       } else {
-        const r = Math.max(3, d.r * pxPerM)
+        const r = d.r
         g.fillStyle = `rgba(40,38,34,${0.7 * fade})`
-        g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill()
+        g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill()
         g.fillStyle = `rgba(70,66,60,${0.7 * fade})`
-        for (let i = 0; i < 6; i++) { const a = i * 1.1 + d.x; g.fillRect(sx + Math.cos(a) * r * 0.5 - r * 0.12, sy + Math.sin(a) * r * 0.5 - r * 0.12, r * 0.25, r * 0.2) }
+        for (let i = 0; i < 6; i++) { const a = i * 1.1 + d.x; g.fillRect(Math.cos(a) * r * 0.5 - r * 0.12, Math.sin(a) * r * 0.5 - r * 0.12, r * 0.25, r * 0.2) }
       }
+      g.restore()
     }
   }
 
