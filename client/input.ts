@@ -239,7 +239,7 @@ export class Input extends Service {
       else if (drag && down.moved) { this.lastClick = undefined; this.boxSelect(drag, ev.shiftKey) }
       else if (!down.moved) this.leftClick(ev)
     } else if (down.button === 2 && !down.moved) {
-      this.rightClick(ev)
+      this.rightClick(ev, true)
     }
   }
 
@@ -328,7 +328,12 @@ export class Input extends Service {
     if (ids.length) state.select(ids, additive)
   }
 
-  private rightClick(ev: MouseEvent) {
+  /**
+   * Gemeinsamer Weg für die rechte Taste und den ⌘-Klick. Nur die echte rechte
+   * Taste (`deselect`) hebt die Auswahl auf – der ⌘-Klick bleibt ein Befehl,
+   * sonst hätte man auf dem Mac keinen Zielbefehl mehr.
+   */
+  private rightClick(ev: MouseEvent, deselect = false) {
     this.lastClick = undefined
     const { state, link, camera } = this.ctx
     if (this.placing) { this.placing = undefined; return }
@@ -346,6 +351,11 @@ export class Input extends Service {
       if (rallied.length) this.ctx.emit('input/order', rallied, 'rally')
       return
     }
+    // Mit Truppen in der Hand hebt die rechte Taste die Auswahl auf, wie in den
+    // Klassikern des Genres. Befehle gibt weiterhin der Linksklick und der
+    // ⌘-Klick; Umschalt+Rechtsklick bleibt das Anhängen von Wegpunkten, sonst
+    // gäbe es für Routen keinen Weg mehr.
+    if (deselect && !ev.shiftKey) { state.select([]); return }
     this.commandAt(units, hit, wx, wy, ev)
   }
 

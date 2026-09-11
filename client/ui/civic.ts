@@ -38,11 +38,16 @@ export function civicPanel(actions: CivicActions, demo = false) {
   }
   const submit = h('button', { type: 'submit' }, 'Handel abschließen') as HTMLButtonElement
   const education = h('button', { type: 'button', onClick: () => run(() => actions.education(!report?.education), 'Ausbildungsauftrag aktualisiert.') }, 'Ausbildung pausieren') as HTMLButtonElement
+  // Ein grauer Knopf ohne Grund sieht aus wie ein kaputter. Derselbe Ton wie
+  // beim Handel: erst steht da, was fehlt, dann ist der Knopf nachvollziehbar.
+  const schooling = h('p', { class: 'civic-schooling' })
   const price = () => GOODS[good.value as Good][direction.value as 'buy' | 'sell'] * Number(amount.value)
   function refreshPrice() {
     quote.textContent = `${Number.isFinite(price()) ? price().toLocaleString('de-DE') : '–'} Credits · ${GOODS[good.value as Good][direction.value as 'buy' | 'sell']} je Stück`
     submit.disabled = busy || !report?.buildings.market_hall || !Number.isSafeInteger(Number(amount.value)) || Number(amount.value) < 1 || Number(amount.value) > 1000
-    education.disabled = busy || !report?.buildings.school
+    const school = !!report?.buildings.school
+    education.disabled = busy || !school
+    education.title = school ? '' : 'Erst eine Schule bauen – sie bildet die Fachkräfte aus.'
     direction.disabled = good.disabled = amount.disabled = busy
   }
   const buildingList = h('div', { class: 'civic-buildings' }, ...CIVIC_BUILDINGS.map(def => h('article',
@@ -57,7 +62,7 @@ export function civicPanel(actions: CivicActions, demo = false) {
     h('section', h('h2', 'Versorgung & Handel'), stock,
       h('form', { class: 'civic-trade', onSubmit: (event: Event) => { event.preventDefault(); void run(() => actions.trade(direction.value as 'buy' | 'sell', good.value as Good, Number(amount.value)), 'Handel abgeschlossen.') } },
         h('label', 'Aktion', direction), h('label', 'Ware', good), h('label', 'Menge', amount), quote, submit), notice),
-    h('section', { class: 'civic-education' }, h('div', h('h2', 'Schule & Ausbildung'), h('p', '2 Credits und 0,2 Konsumgüter je neuer Fachkraft. Büros brauchen Fachkräfte und Waren. Strommangel halbiert die Produktion und stoppt Ausbildung.')), education),
+    h('section', { class: 'civic-education' }, h('div', h('h2', 'Schule & Ausbildung'), h('p', '2 Credits und 0,2 Konsumgüter je neuer Fachkraft. Büros brauchen Fachkräfte und Waren. Strommangel halbiert die Produktion und stoppt Ausbildung.'), schooling), education),
     h('details', h('summary', 'Gebäude für deine Stadt'), buildingList),
     h('footer', 'Lokaler Händler mit endlichen Beständen · Richtwerte je Spielminute · Lagerlimit 10.000 je Ware'),
   ) as HTMLDialogElement
@@ -80,6 +85,7 @@ export function civicPanel(actions: CivicActions, demo = false) {
     if(actions.housing){const selected=upgradeSelect.value||url.searchParams.get('upgradeBuilding');const homes=actions.housing();const key=homes.map(e=>e.id).join(',');if(upgradeSelect.dataset.homes!==key){upgradeSelect.dataset.homes=key;upgradeSelect.replaceChildren(...homes.map(e=>h('option',{value:String(e.id)},e.name)));if(selected&&homes.some(e=>String(e.id)===selected))upgradeSelect.value=selected}upgrade.disabled=busy||homes.length===0}
     stock.textContent = `Budget: ${next.credits.toLocaleString('de-DE')} CR · Lager: ${next.stock.food.toLocaleString('de-DE')} Nahrung · ${next.stock.goods.toLocaleString('de-DE')} Konsumgüter. Händler: ${next.merchant.stock.food} Nahrung · ${next.merchant.stock.goods} Konsumgüter · ${next.merchant.funds.toLocaleString('de-DE')} CR. ${next.buildings.market_hall ? '' : 'Für den Handel fehlt eine Markthalle.'}`
     education.textContent = next.education ? `Ausbildung pausieren (${next.trainingPerMinute}/min)` : 'Ausbildung fortsetzen'
+    schooling.textContent = next.buildings.school ? '' : 'Für die Ausbildung fehlt eine Schule.'
     refreshPrice()
   }
   return { update, isOpen: () => dialog.open, open: () => { if (!dialog.open) dialog.showModal(); setParam('panel', 'civic') }, close }

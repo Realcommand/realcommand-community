@@ -60,12 +60,12 @@ export class Bag {
   constructor(lines: string[], random: () => number = Math.random) { this.lines = lines; this.random = random }
   draw(): string | undefined {
     if (!this.lines.length) return undefined
-    if (!this.rest.length) {
-      this.rest = this.lines.slice()
-      if (this.rest.length > 1 && this.rest[this.rest.length - 1] === this.last) this.rest.unshift(this.rest.pop()!)
-    }
-    const index = Math.floor(this.random() * this.rest.length)
-    const [line] = this.rest.splice(Math.min(index, this.rest.length - 1), 1)
+    if (!this.rest.length) this.rest = this.lines.slice()
+    let index = Math.min(Math.floor(this.random() * this.rest.length), this.rest.length - 1)
+    // Über die Mischung hinweg darf sich keine Zeile unmittelbar wiederholen –
+    // sonst sagt dieselbe Einheit zweimal hintereinander denselben Satz.
+    if (this.rest.length > 1 && this.rest[index] === this.last) index = (index + 1) % this.rest.length
+    const [line] = this.rest.splice(index, 1)
     this.last = line
     return line
   }
@@ -136,7 +136,9 @@ export class Voice {
     if (this.mode === 'off') return false
     const now = this.host.now()
     const ack = ACK_EVENTS.includes(event)
-    if (now - this.lastLine < GAP_LINE) return false
+    // Dringendes darf sofort dazwischen: eine Meldung, die auf die nächste
+    // Sprechpause wartet, kommt zu spät. Für sich selbst hat sie GAP_URGENT.
+    if (!opts.urgent && now - this.lastLine < GAP_LINE) return false
     if (ack && now - this.lastAck < GAP_ACK) return false
     // Dringendes darf eine laufende Ansage verdrängen, aber nicht jede Sekunde
     // wiederkehren: sonst redet der Funk eine ganze Angriffswelle durch.

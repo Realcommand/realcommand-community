@@ -178,7 +178,7 @@ export class Renderer extends Service {
             else if (e.type === 'refinery') effects.emitAmbient(e.id, e.x - s * 0.13, e.y - s * 0.85, 'flare', s)
           } else if (e.kind === 'u' && (e.def as any).domain === 'land' && e.def.category === 'vehicle' && e.speed > 0.5) {
             effects.emitDust(e.id, e.x, e.y, e.heading, e.def.size)
-            if (e.def.category === 'vehicle' && e.def.size >= 4) effects.emitTracks(e.id, e.x, e.y, e.heading, e.def.size * 1.25)
+            if (e.def.size >= 4) effects.emitTracks(e)
           } else if (e.kind === 'u' && (e.def as any).domain === 'sea' && e.speed > 0.5) {
             effects.emitWake(e.id, e.x, e.y, e.heading, e.def.size)
           } else if (e.kind === 'u' && (e.def as any).domain === 'air' && !e.off) {

@@ -13,7 +13,7 @@ import { formatLonLat, formatDistance, lonLatToWorld } from '../shared/geo.ts'
 import { formatTime } from '../shared/math.ts'
 import { WORLD_W, WORLD_H, COMMUNITY_REPO_URL } from '../shared/constants.ts'
 import { drawIcon } from './sprites.ts'
-import { cancelReadyBuilding, cancelTarget, CANCEL_LABEL, productionMark, shownCategory } from './production.ts'
+import { cancelReadyBuilding, cancelTarget, CANCEL_LABEL, missingPrereqs, productionMark, shownCategory } from './production.ts'
 import type { ClientEntity, Phase } from './state.ts'
 import { buildShell, type ShellRefs } from './ui/shell.ts'
 import { h, fill } from './engine/render.ts'
@@ -44,6 +44,8 @@ interface ItemCard {
   progress: HTMLElement
   percent: HTMLElement
   status: HTMLElement
+  /** Symbolreihe der fehlenden Voraussetzungen; jedes Symbol führt dorthin. */
+  needs: HTMLElement
 }
 
 export class UI extends Service {
@@ -127,6 +129,8 @@ export class UI extends Service {
     this.ctx.on('state/me', () => this.refreshHud())
     this.ctx.on('state/players', () => this.refreshHud())
     this.ctx.on('state/notice', (text, kind) => this.toast(text, kind))
+    // Funksprüche stehen im selben Kanal wie Befehle und Meldungen.
+    this.ctx.on('audio/radio', (text) => this.addChat('Funk', text, 'var(--ok)'))
     this.ctx.on('state/chat', (from, name, text) => this.addChat(name, text,
       name === 'KI' ? 'var(--info)' : name === 'System' ? 'var(--accent)' : this.ctx.state.playerColor(from)))
     this.ctx.on('state/selection', () => { this.refreshSelection(); this.units.selectionChanged(this.ctx.state.selected) })
@@ -201,15 +205,19 @@ export class UI extends Service {
     // Ton: Knopf und Regler zeigen den gespeicherten Stand, bevor jemand klickt.
     s.setSound(audio.on)
     s.setMusic(audio.music)
+    s.setVoice(audio.settings.voice)
     s.setVolumes({
       master: Math.round(audio.settings.master * 100),
       world: Math.round(audio.settings.world * 100),
       ambient: Math.round(audio.settings.ambient * 100),
       ui: Math.round(audio.settings.ui * 100),
       music: Math.round(audio.settings.music * 100),
+      radio: Math.round(audio.settings.radio * 100),
+      machines: Math.round(audio.settings.machines * 100),
     })
     s.onSound(() => s.setSound(audio.toggle()))
     s.onMusic(() => s.setMusic(audio.toggleMusic()))
+    s.onVoice((mode) => s.setVoice(audio.setVoice(mode)))
     s.onVolume((which, value) => audio.setVolume(which, value / 100))
     // Jeder Knopf im HUD klickt hörbar; das Spielfeld selbst meldet sich über die Eingabe.
     s.root.addEventListener('click', (event) => {
@@ -436,6 +444,23 @@ export class UI extends Service {
     this.buildItems()
   }
 
+  /**
+   * Führt zu einem Bauplan: richtiger Reiter, in den sichtbaren Bereich gerollt,
+   * kurz hervorgehoben. Ohne das sucht man die fehlende Voraussetzung in sechs
+   * Reitern – und findet sie erst nach dem dritten Blick.
+   */
+  private revealItem(id: string) {
+    const def = DEFS[id]
+    if (!def) return
+    this.selectTab(def.category)
+    const card = this.cards.get(id)
+    if (!card) return
+    card.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    card.el.classList.add('is-flash')
+    setTimeout(() => card.el.classList.remove('is-flash'), 1200)
+    this.ctx.audio?.cue('ui.open')
+  }
+
   /** Reiter wechseln – von den Reitern selbst und aus der Warteschlangenzeile. */
   private selectTab(cat: Category) {
     if (cat === this.tab) return
@@ -458,6 +483,9 @@ export class UI extends Service {
     this.cards.clear()
     const cards = this.defsForTab().map(def => {
       const badge = h('div', { class: 'hud-item-badge is-hidden' })
+      // Fehlt eine Voraussetzung, steht sie nicht nur da: ein Klick auf ihr
+      // Symbol springt zu ihr, statt dass man sie in sechs Reitern sucht.
+      const needs = h('div', { class: 'hud-item-needs is-hidden' })
       const progress = h('div', { class: 'hud-item-progress' })
       const percent = h('div', { class: 'hud-item-pct rc-num' })
       const status = h('div', { class: 'hud-item-status' })
@@ -481,7 +509,7 @@ export class UI extends Service {
         h('div', { class: 'hud-item-icon' }, this.icon(def, 116, 72)),
         h('div', { class: 'hud-item-text' },
           h('div', { class: 'hud-item-name' }, def.name),
-          meta),
+          meta, needs),
         badge, percent, status, progress,
       )
       // Die Blase hängt am Element, nicht am Mauszeiger: Die Engine kennt nur
@@ -489,7 +517,7 @@ export class UI extends Service {
       // gibt es nicht, jeder Zeigerwechsel warf einen Fehler und es erschien nie
       // eine Blase. Die Seitenleiste steht rechts, also klappt sie nach links auf.
       tooltip(el, () => this.tooltipView(def), { placement: 'left' })
-      this.cards.set(def.id, { el, meta, cancel, badge, progress, percent, status })
+      this.cards.set(def.id, { el, meta, cancel, badge, progress, percent, status, needs })
       return h('div', { class: 'hud-build-row' }, el, cancel)
     })
     fill(this.shell.itemsHost, ...cards)
@@ -505,6 +533,21 @@ export class UI extends Service {
 
     for (const [id, card] of this.cards) {
       const locked = !available.has(id)
+      // Fehlende Voraussetzungen als anklickbare Symbole – der kurze Weg dorthin.
+      const missing = locked ? missingPrereqs(DEFS[id], state.entities.values(), state.myId) : []
+      card.needs.classList.toggle('is-hidden', !missing.length)
+      // Die Zeile tritt an die Stelle von Kosten und Bauzeit: gesperrt zählt nur,
+      // was fehlt, und die Karte bleibt so hoch wie alle anderen.
+      card.meta.classList.toggle('is-hidden', missing.length > 0)
+      if (missing.length && card.needs.dataset.for !== missing.join(',')) {
+        card.needs.dataset.for = missing.join(',')
+        fill(card.needs, h('span', { class: 'rc-faint' }, 'Fehlt:'), ...missing.map(need => h('button', {
+          type: 'button', class: 'hud-need',
+          title: `${DEFS[need].name} zuerst bauen – klicken führt hin`,
+          'aria-label': `Zu ${DEFS[need].name} springen`,
+          onClick: (ev: Event) => { ev.stopPropagation(); this.revealItem(need) },
+        }, this.icon(DEFS[need], 44, 28))))
+      }
       const active = slot?.type === id
       const ready = slot?.ready.filter(type=>type===id).length ?? 0
       // Der Knopf zeigt an, was er trifft: fertigen Bau, laufenden Bau oder Auftrag.
@@ -610,10 +653,10 @@ export class UI extends Service {
       return
     }
     if (!me.available.includes(def.id)) {
-      const missing = def.prereq
-        .filter(p => ![...state.entities.values()].some(e => e.owner === state.myId && e.type === p))
-        .map(p => DEFS[p]?.name ?? p)
-      this.toast(missing.length ? `Benötigt: ${missing.join(', ')}` : 'Nicht verfügbar', 'error')
+      const missing = missingPrereqs(def, state.entities.values(), state.myId)
+      this.toast(missing.length ? `Benötigt: ${missing.map(p => DEFS[p].name).join(', ')}` : 'Nicht verfügbar', 'error')
+      // Ein Klick auf das gesperrte Feld führt gleich zum ersten fehlenden Stück.
+      if (missing.length) this.revealItem(missing[0])
       return
     }
     if (me.funds < def.cost) { this.toast(`Nicht genug Geld (${def.cost} benötigt)`, 'error'); return }
@@ -739,17 +782,27 @@ export class UI extends Service {
     const actions: HTMLElement[] = []
     if (own) {
       const add = (icon: Parameters<typeof Icon>[0], label: string, fn: () => void, title = '', danger = false) => {
-        actions.push(h('button', {
+        const button = h('button', {
           type: 'button', class: { 'hud-action': true, 'is-danger': danger }, title,
           onClick: fn,
-        }, Icon(icon, { size: 14 }), h('span', label)))
+        }, Icon(icon, { size: 14 }), h('span', label)) as HTMLButtonElement
+        actions.push(button)
+        return button
       }
       const units = sel.filter(e => e.kind === 'u' && e.owner === state.myId && e.inside === undefined)
       const buildings = sel.filter(e => e.kind === 'b')
       if (units.length) {
         actions.push(tacticalControls(input, units))
         add('shield', 'Wache', () => input.issue({ k: 'guard' }), 'G – Standort bewachen; Drohnen starten und kehren nach dem Laden zum Wachpunkt zurück')
-        if (units.some(u => (u.def as UnitDef).role === 'crawler')) add('base', 'Entfalten', () => input.issue({ k: 'deploy' }), 'D – wird zur Kommandozentrale (45 s)')
+        const crawlers = units.filter(u => (u.def as UnitDef).role === 'crawler')
+        if (crawlers.length) {
+          // Wer sich schon entfaltet, hat hier nichts mehr zu holen: ein zweiter
+          // Auftrag setzt die 45 Sekunden nur von vorn an.
+          const unfolding = crawlers.every(u => u.state === 'deploy')
+          add('base', 'Entfalten', () => input.issue({ k: 'deploy' }),
+            unfolding ? 'Entfaltet sich bereits – daraus wird die Kommandozentrale' : 'D – wird zur Kommandozentrale (45 s)',
+          ).disabled = unfolding
+        }
         if (units.some(u => (u.def as UnitDef).role === 'extractor')) add('resource', 'Abbauen', () => input.issue({ k: 'harvest' }))
         if (units.some(u => (u.cargo ?? 0) > 0)) add('download', 'Entladen', () => input.issue({ k: 'unload' }), 'U')
         if (units.some(u => (u.def as UnitDef).domain === 'air')) add('refresh', 'Zum Flugfeld', () => input.issue({ k: 'return' }), 'R – Akku laden, nachrüsten und ausbessern')
@@ -759,7 +812,13 @@ export class UI extends Service {
       }
       if (buildings.length === 1) {
         const b = buildings[0]
-        add('wrench', b.repairing ? 'Reparatur stoppen' : 'Reparieren', () => link.send({ t: 'repair', id: b.id }))
+        // Ein unversehrtes Gebäude lässt sich nicht reparieren: der Server nimmt
+        // den Auftrag wortlos nicht an. Der Knopf erscheint deshalb erst, wenn es
+        // etwas auszubessern gibt – wie „In die Werkstatt“ bei den Fahrzeugen.
+        if (b.repairing || b.hp < b.maxHp * 0.99) {
+          add('wrench', b.repairing ? 'Reparatur stoppen' : 'Reparieren', () => link.send({ t: 'repair', id: b.id }),
+            'Baut Schäden laufend aus; volle Instandsetzung kostet 30 % der Baukosten. Unter Beschuss ruht die Arbeit.')
+        }
         if ((b.def as BuildingDef).produces) add('pin', 'Sammelpunkt', () => { input.mode = 'rally' }, 'Danach Position anklicken')
         add('trash', 'Verkaufen', () => {
           if (confirm(`${b.def?.name} wirklich verkaufen (50 % Erstattung)?`)) link.send({ t: 'sell', id: b.id })

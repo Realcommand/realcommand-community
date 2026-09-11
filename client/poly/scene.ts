@@ -4,6 +4,9 @@ import type { ClientEntity } from '../state.ts'
 import type { Camera } from '../camera.ts'
 import { DEPOSIT_RADIUS } from '../../shared/placement.ts'
 import {cityNetwork,roadSurfaces,type RoadSurface} from '../../shared/infrastructure.ts'
+/** Umkreis um den Bildausschnitt, aus dem Straßen berechnet werden. Eine Stadt
+ * liegt innerhalb des Bauradius von 2,5 km; etwas Reserve für Nachbarstädte. */
+const ROAD_POOL_PADDING = 3_000
 import { makeModel, type Part } from './models.ts'
 import { PrimitiveBatch } from './batch.ts'
 import { Landscape, withRoads, type GroundSource } from './landscape.ts'
@@ -100,17 +103,26 @@ export class PolyScene {
 
     const view = cam.viewRect(cam.mpp * 100 + (cam.mpp < 160 ? 200 : 0))
     const visible: ClientEntity[] = []
-    for (const e of entities) if ((e.visible || e.ghost) && e.x >= view.x0 && e.x <= view.x1 && e.y >= view.y0 && e.y <= view.y1) visible.push(e)
+    // Straßen brauchen die ganze Stadt, nicht nur den Bildausschnitt: ein
+    // Verkehrszentrum knapp außerhalb des Randes hätte sonst keine Wege, und
+    // Pfade um unsichtbare Hindernisse fielen anders aus als auf dem Server.
+    const roadPool: ClientEntity[] = []
+    const pad = ROAD_POOL_PADDING
+    for (const e of entities) {
+      if (!(e.visible || e.ghost)) continue
+      if (e.x >= view.x0 && e.x <= view.x1 && e.y >= view.y0 && e.y <= view.y1) visible.push(e)
+      if (e.x >= view.x0 - pad && e.x <= view.x1 + pad && e.y >= view.y0 - pad && e.y <= view.y1 + pad) roadPool.push(e)
+    }
     visible.sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)) || (a.x - cam.x) ** 2 + (a.y - cam.y) ** 2 - (b.x - cam.x) ** 2 - (b.y - cam.y) ** 2)
     const near = cam.mpp < 160
     this.landscape.group.visible = near
     if(near&&source.ready&&cam.mpp<20){
-      const buildings=visible.filter(e=>e.kind==='b'&&e.def).sort((a,b)=>a.id-b.id)
+      const buildings=roadPool.filter(e=>e.kind==='b'&&e.def).sort((a,b)=>a.id-b.id)
       const key=buildings.map(e=>`${e.id}:${e.owner}:${e.type}:${e.x}:${e.y}`).join('|')
       if(key!==this.roadKey){
         this.roadKey=key;this.roads=[];this.roadRevision++
         const owners=new Set(buildings.map(e=>e.owner))
-        const obstacles=visible.filter(e=>e.kind!=='u').map(e=>({id:e.id,type:e.type,x:e.x,y:e.y,size:e.def?.size??DEPOSIT_RADIUS}))
+        const obstacles=roadPool.filter(e=>e.kind!=='u').map(e=>({id:e.id,type:e.type,x:e.x,y:e.y,size:e.def?.size??DEPOSIT_RADIUS}))
         for(const owner of owners){
           const city=buildings.filter(e=>e.owner===owner).map(e=>({id:e.id,type:e.type,x:e.x,y:e.y,size:e.def!.size}))
           this.roads.push(...roadSurfaces(cityNetwork(city,(x,y)=>source.isLand(x,y),obstacles).roads,city))

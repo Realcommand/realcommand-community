@@ -18,8 +18,11 @@ assert.equal(audioSettings('?volume=50', null).master, 0.5)
 assert.equal(audioSettings('?volume=999', null).master, 1, 'Lautstärke bleibt im Bereich')
 assert.equal(audioSettings('?volume=abc', null).master, off.master, 'unsinnige Angaben ändern nichts')
 assert.deepEqual(audioSettings('', '{kaputt'), off, 'ein beschädigter Speicherstand fällt auf die Voreinstellung zurück')
-const stored = audioSettings('', JSON.stringify({ on: true, master: 0.4, world: 0.2, ui: 0.1, ambient: 0, musicOn: false, music: 0.3, voice: 'codes', radio: 0.5 }))
-assert.deepEqual(stored, { on: true, master: 0.4, world: 0.2, ui: 0.1, ambient: 0, musicOn: false, music: 0.3, voice: 'codes', radio: 0.5 })
+const gespeichert = { on: true, master: 0.4, world: 0.2, ui: 0.1, ambient: 0, musicOn: false, music: 0.3, voice: 'codes', radio: 0.5, machines: 0.8 }
+assert.deepEqual(audioSettings('', JSON.stringify(gespeichert)), gespeichert)
+// Ein Stand aus der Zeit vor dem Maschinenbus bekommt dessen Voreinstellung.
+assert.equal(audioSettings('', JSON.stringify({ on: true, ambient: 0.5, v: 3 })).machines, 0.6,
+  'ältere Stände kennen die Maschinen noch nicht und erben den Wert')
 assert.equal(audioSettings('?voice=off', null).voice, 'off', 'der Funk lässt sich über die Adresse stummschalten')
 assert.equal(audioSettings('', JSON.stringify({ voice: 'unsinn' })).voice, 'speech', 'unbekannte Angaben fallen auf Sprache zurück')
 
@@ -94,7 +97,7 @@ const master = ac.of('gain').find(g => g.outputs.includes(limiter))
 assert.ok(master, 'alles läuft über eine Summe')
 assert.equal(master.gain.value, audio.settings.master)
 const busGains = ac.of('gain').filter(g => g.outputs.includes(master))
-assert.equal(busGains.length, 5, 'Welt, Bedienung, Umgebung, Musik und Funk sind getrennt regelbar')
+assert.equal(busGains.length, 6, 'Welt, Bedienung, Umgebung, Musik, Funk und Maschinen sind getrennt regelbar')
 assert.equal(ac.loops.length, 3, 'Wind, Brandung und Blätter laufen als Dauerklang')
 
 // ---------------------------------------------------------------- Ereignisse
@@ -120,6 +123,13 @@ for (const [kind, type] of [['b', 'power'], ['u', 'mbt'], ['p', 'rifleman'], ['a
 }
 ac.advance(5)
 plays('Baustelle gesetzt', () => fire({ e: 'placed', id: 4, x: HOME_X, y: HOME_Y, ty: 'power' }))
+// Ein Landungsflugzeug setzt nicht auf wie eine Baustelle: eigener, langer Klang.
+ac.advance(5)
+const vorLandung = voices().length
+fire({ e: 'placed', id: 41, x: HOME_X, y: HOME_Y, ty: 'dropship' })
+const landung = voices().slice(vorLandung)
+assert.ok(landung.length >= 5, 'die Landung hat mehrere Schichten')
+assert.ok(landung.some(q => q.stoppedAt - q.startedAt > 3), 'sie schwillt über Sekunden an, statt zu klicken')
 state.entities.set(9, { id: 9, x: HOME_X, y: HOME_Y })
 ac.advance(5)
 plays('Übernahme', () => fire({ e: 'capture', id: 9, by: 2 }))
@@ -313,6 +323,12 @@ camera.moveTo(HOME_X, HOME_Y, 2)
 const level = (bed) => bed.gain.gain.value
 const [traffic, air, plant] = ['traffic', 'air', 'plant'].map(name => audio.beds[name])
 assert.ok(traffic && air && plant, 'Verkehr, Luft und Anlagen haben eigene Dauerklänge')
+// Sie hängen am Maschinenbus, nicht an der Umgebung: die steht ab Werk auf 5 %.
+const maschinenBus = busGains.find(g => g.gain.value === audio.settings.machines)
+assert.ok(maschinenBus, 'es gibt einen eigenen Maschinenbus')
+for (const bett of [traffic, air, plant]) {
+  assert.ok(bett.gain.outputs.includes(maschinenBus), 'jedes Maschinenbett läuft über ihn')
+}
 assert.equal(level(traffic), 0, 'ohne Einheiten im Bild bleiben die Maschinen stumm')
 
 const unit = (id, type, over = {}) => ({ id, type, x: HOME_X, y: HOME_Y, kind: 'u', speed: 30, def: DEFS[type], ...over })

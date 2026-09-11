@@ -3,7 +3,7 @@ import { signal, effect, onCleanup, type Accessor } from '../engine/signal.ts'
 import { Icon, StatusDot } from '../engine/icons.ts'
 import { Button } from '../engine/widgets.ts'
 import { graphicsControls } from '../poly/controls.ts'
-import { audioControls, type Volumes, type VolumeKey } from './audio-controls.ts'
+import { audioControls, type Volumes, type VolumeKey, type VoiceMode } from './audio-controls.ts'
 import { headerNavigation, type HeaderPanel } from './header-navigation.ts'
 import { MOBILE_QUERY } from '../responsive.ts'
 
@@ -15,10 +15,13 @@ interface HeaderProps {
   ping: Accessor<string>
   online: Accessor<string>
   connected: Accessor<boolean>
+  /** Falsch, solange das Anmeldefenster darüberliegt: dann führt kein Werkzeug irgendwohin. */
+  active: Accessor<boolean>
   speed: Accessor<number>
   protection: Accessor<number>
   sound: Accessor<boolean>
   music: Accessor<boolean>
+  voice: Accessor<VoiceMode>
   volumes: Accessor<Volumes>
   mobileMenuHost: HTMLElement
   onMenuOpen(): void
@@ -29,6 +32,7 @@ interface HeaderProps {
   onApi(): void
   onSound(): void
   onMusic(): void
+  onVoice(mode: VoiceMode): void
   onVolume(which: VolumeKey, value: number): void
   onHelp(): void
 }
@@ -75,8 +79,8 @@ export function Header(p: HeaderProps) {
     h('div', { class: 'hud-graphics-panel', id: 'hud-graphics-panel' },
       h('b', '3D-Einstellungen'), graphicsControls(),
       h('b', 'Ton'), audioControls({
-        on: p.sound, music: p.music, volumes: p.volumes,
-        onToggle: p.onSound, onToggleMusic: p.onMusic, onVolume: p.onVolume,
+        on: p.sound, music: p.music, voice: p.voice, volumes: p.volumes,
+        onToggle: p.onSound, onToggleMusic: p.onMusic, onVoice: p.onVoice, onVolume: p.onVolume,
       }),
       h('a', { href: '/engine.html' + location.search, onClick: (event: Event) => {
         (event.currentTarget as HTMLAnchorElement).href = '/engine.html' + location.search
@@ -93,7 +97,7 @@ export function Header(p: HeaderProps) {
     h('div', { class: 'hud-brand' }, Icon('radar', { size: 20 }), h('b', 'Real Command')),
     h('div', { class: 'hud-live' },
       readout('Weltzeit', p.clock),
-      Show(() => p.speed() > 1, () => h('button', {
+      Show(() => p.active() && p.speed() > 1, () => h('button', {
         type: 'button', class: 'hud-speed', title: 'Zeitfaktor der Simulation – klicken für die Regler',
         onClick: run(p.onApi),
       }, Icon('fastForward', { size: 14 }), h('span', { class: 'rc-num' }, text(() => '×' + p.speed())))),
@@ -107,7 +111,13 @@ export function Header(p: HeaderProps) {
       h('span', { class: 'rc-num' }, text(p.ping)),
     ),
     toggle,
-    h('div', { class: 'hud-header-panel', id: 'hud-header-panel', 'data-open': () => String(menuOpen()) },
+    // Das Anmeldefenster liegt über der Kopfzeile und schluckt jeden Klick.
+    // Sichtbare Werkzeuge, die nichts tun, sind schlimmer als keine – also weg,
+    // genau wie Seitenleiste, Funk und Dock in derselben Phase.
+    h('div', {
+      class: { 'hud-header-panel': true, 'is-hidden': () => !p.active() },
+      id: 'hud-header-panel', 'data-open': () => String(menuOpen()),
+    },
       h('div', { class: 'hud-telemetry' }, readout('Position', p.coords), readout('Maßstab', p.scale),
         h('div', { class: 'hud-readout hud-online' }, h('span', { class: 'rc-caps' }, 'Spieler'), h('span', text(p.online)))),
       h('nav', { class: 'hud-tools', 'aria-label': 'Werkzeuge' },
@@ -127,6 +137,8 @@ export function Header(p: HeaderProps) {
   const update = () => {
     toggle.setAttribute('aria-expanded', String(menuOpen()))
     graphicsSummary.setAttribute('aria-expanded', String(panel() === 'graphics'))
+    // Der Knopf öffnet nur das Werkzeugmenü; ohne Werkzeuge hat er nichts zu öffnen.
+    toggle.classList.toggle('is-hidden', !p.active())
   }
   effect(update)
 

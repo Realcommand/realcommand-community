@@ -29,7 +29,7 @@ declare module 'cordis' {
 }
 
 type NoiseColor = 'white' | 'pink' | 'brown'
-export type Bus = 'world' | 'ui' | 'ambient' | 'music' | 'radio'
+export type Bus = 'world' | 'ui' | 'ambient' | 'music' | 'radio' | 'machines'
 
 /**
  * Eine Schicht eines Klangs. Ein Schuss besteht aus Knall (Rauschen) und Körper
@@ -197,6 +197,17 @@ const CUES = {
     { wave: 'noise', color: 'pink', filter: 'bandpass', f0: 1600, f1: 700, dur: 0.07, gain: 0.3, q: 1.6 },
     { wave: 'triangle', f0: 380, f1: 190, dur: 0.09, gain: 0.16 },
   ],
+  // Das Landungsflugzeug ist das erste, was ein Spieler hört: vier Triebwerke,
+  // die aus der Ferne anschwellen, darüber das Pfeifen der Turbinen.
+  'air.arrive': [
+    { wave: 'noise', color: 'brown', filter: 'lowpass', f0: 200, f1: 900, dur: 3.4, gain: 0.85, attack: 1.4 },
+    { wave: 'sawtooth', f0: 62, f1: 96, dur: 3.4, gain: 0.4, attack: 1.2 },
+    { wave: 'sawtooth', f0: 240, f1: 420, dur: 3.2, gain: 0.22, attack: 1.6 },
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 1800, f1: 3200, dur: 2.6, gain: 0.16, q: 0.8, attack: 1.4, at: 0.6 },
+    // Der Aufsetzer: kurzes Quietschen und ein satter Schlag.
+    { wave: 'noise', color: 'white', filter: 'bandpass', f0: 2600, f1: 1200, dur: 0.35, gain: 0.3, q: 2.2, at: 2.9 },
+    { wave: 'sine', f0: 90, f1: 38, dur: 0.5, gain: 0.5, at: 2.95 },
+  ],
   'unit.ready': [
     { wave: 'square', f0: 523, dur: 0.12, gain: 0.18, attack: 0.01 },
     { wave: 'square', f0: 784, dur: 0.28, gain: 0.18, attack: 0.01, at: 0.1 },
@@ -327,7 +338,7 @@ const THROTTLE: Partial<Record<Cue, number>> = {
   'hit.small': 0.05, 'hit.heavy': 0.07, 'hit.water': 0.12,
   'explosion.small': 0.07, 'explosion.large': 0.12, 'collapse': 0.25, 'die.person': 0.12, 'nuke': 3,
   'gather.wood': 0.12, 'gather.stone': 0.12, 'gather.ore': 0.12, 'gather.soft': 0.2,
-  'place': 0.15, 'build.done': 0.3, 'work': 0.35, 'capture': 0.5, 'unit.ready': 0.4, 'arrive': 0.6, 'knowledge': 0.5,
+  'place': 0.15, 'build.done': 0.3, 'work': 0.35, 'air.arrive': 4, 'capture': 0.5, 'unit.ready': 0.4, 'arrive': 0.6, 'knowledge': 0.5,
   'alarm': 12, 'missile.launch': 2, 'missile.inbound': 4, 'power.low': 20, 'milestone': 2, 'avatar.down': 2, 'spawn': 5,
   'start.infantry': 0.08, 'start.vehicle': 0.12, 'start.aircraft': 0.12, 'start.ship': 0.12, 'start.building': 0.12,
   'radio.open': 0.25, 'radio.close': 0.05, 'radio.deny': 0.5,
@@ -372,13 +383,15 @@ export interface AudioSettings {
   /** Funk: gesprochen, als Kürzel oder aus. */
   voice: VoiceMode
   radio: number
+  /** Motoren, Turbinen, Anlagensummen – getrennt von der stillen Umgebung. */
+  machines: number
 }
 
 // Musik läuft im Hintergrund mit: laut genug, um sie zu bemerken, leise genug,
 // um sie beim Spielen zu vergessen. Wer mehr will, zieht den Regler auf.
-const DEFAULTS: AudioSettings = { on: false, master: 0.7, world: 1, ui: 0.75, ambient: 0.05, musicOn: true, music: 0.05, voice: 'speech', radio: 0.9 }
+const DEFAULTS: AudioSettings = { on: false, master: 0.7, world: 1, ui: 0.75, ambient: 0.05, musicOn: true, music: 0.05, voice: 'speech', radio: 0.9, machines: 0.6 }
 /** Erhöht, wenn ein gespeicherter Stand nicht mehr zum Klangbild passt. */
-const SETTINGS_VERSION = 3
+const SETTINGS_VERSION = 4
 export const AUDIO_KEY = 'rc.audio'
 
 const clamp = (v: number, lo: number, hi: number) => v < lo ? lo : v > hi ? hi : v
@@ -402,6 +415,7 @@ export function audioSettings(search: string, stored: string | null): AudioSetti
     s.music = level(saved.music, s.music)
     if (saved.voice === 'speech' || saved.voice === 'codes' || saved.voice === 'off') s.voice = saved.voice
     s.radio = level(saved.radio, s.radio)
+    s.machines = level(saved.machines, s.machines)
     // Ältere Stände hatten eine viel zu laute Umgebung. Einmalig herunterziehen,
     // sonst bliebe das alte Klangbild in jedem Browser stehen, der schon da war.
     if (((saved as { v?: number }).v ?? 1) < 2) s.ambient = Math.min(s.ambient, DEFAULTS.ambient)
@@ -775,7 +789,9 @@ export class Audio extends Service {
       const swell = ac.createGain()
       const gain = ac.createGain()
       gain.gain.value = 0
-      filter.connect(swell).connect(gain).connect(bus)
+      // Motoren hängen am Maschinenbus: die Umgebung steht ab Werk auf 5 %, und
+      // ein landendes Flugzeug darf davon nicht abhängen.
+      filter.connect(swell).connect(gain).connect(this.buses!.machines)
       const lfo = ac.createOscillator()
       lfo.frequency.value = spec.sway
       const colour = ac.createGain()
@@ -861,9 +877,9 @@ export class Audio extends Service {
     this.ramp(this.beds.surf, surf)
     if (surf > 0 && this.ac.currentTime >= this.nextWave) this.wave(this.ac.currentTime)
     this.ramp(this.beds.leaves, near * forest * 0.22)
-    this.ramp(this.beds.traffic, near * share(traffic, 8) * 0.3)
-    this.ramp(this.beds.air, near * share(air, 4) * 0.12)
-    this.ramp(this.beds.plant, near * share(plant, 10) * 0.16)
+    this.ramp(this.beds.traffic, near * share(traffic, 8) * 0.45)
+    this.ramp(this.beds.air, near * share(air, 3) * 0.4)
+    this.ramp(this.beds.plant, near * share(plant, 10) * 0.25)
     if (working) {
       const home = state?.homePosition?.()
       if (home) this.play('work', { x: home.x, y: home.y, gain: 0.7 + Math.random() * 0.5 })
@@ -900,9 +916,13 @@ export class Audio extends Service {
         }
         break
       }
-      case 'placed':
+      case 'placed': {
+        // Ein Landungsflugzeug setzt nicht auf wie eine Baustelle gesetzt wird.
+        const def = DEFS[ev.ty]
+        if (def?.category === 'aircraft') { this.play('air.arrive', { x: ev.x, y: ev.y, gain: 1.2 }); break }
         this.play('place', { x: ev.x, y: ev.y })
         break
+      }
       case 'capture': {
         const e = this.ctx.state?.entities.get(ev.id)
         this.play('capture', e ? { x: e.x, y: e.y } : {})
@@ -1024,7 +1044,10 @@ export class Audio extends Service {
     const bus = (volume: number) => { const g = ac.createGain(); g.gain.value = volume; g.connect(master); return g }
     this.ac = ac
     this.master = master
-    this.buses = { world: bus(this.settings.world), ui: bus(this.settings.ui), ambient: bus(this.settings.ambient), music: bus(this.settings.music), radio: bus(this.settings.radio) }
+    this.buses = {
+      world: bus(this.settings.world), ui: bus(this.settings.ui), ambient: bus(this.settings.ambient),
+      music: bus(this.settings.music), radio: bus(this.settings.radio), machines: bus(this.settings.machines),
+    }
     // Der Funk spricht über die Sprachausgabe des Geräts; Squelch und Kürzel
     // laufen durch den eigenen Bus, damit ein Regler beides zugleich fasst.
     this.voice = new Voice({

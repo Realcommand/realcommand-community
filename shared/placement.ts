@@ -19,11 +19,13 @@ export function occupantRadius(e: Occupant): number {
 }
 export interface PlacementOptions {
   def: BuildingDef, x: number, y: number, owner: number, builderId?: number
+  /** Deploy only: the crawler's own escort makes way instead of blocking. */
+  ignoreOwnUnits?: boolean
   allied?(a:number,b:number):boolean
   terrain: { isLand(x: number, y: number): boolean, isCoast(x: number, y: number): boolean }
   query(x: number, y: number, radius: number, visit: (e: Occupant, d2: number) => void): void
 }
-export function checkPlacement({ def, x, y, owner, builderId, terrain, query, allied=()=>false }: PlacementOptions): { code: string, message: string } | null {
+export function checkPlacement({ def, x, y, owner, builderId, ignoreOwnUnits, terrain, query, allied=()=>false }: PlacementOptions): { code: string, message: string } | null {
   const s = def.size
   if (![x,y].every(Number.isFinite) || x-s<0 || y-s<0 || x+s>WORLD_W || y+s>WORLD_H) return { code:'outside_world',message:'outside the world' }
   const corners = [[x,y],[x-s,y-s],[x+s,y-s],[x-s,y+s],[x+s,y+s]]
@@ -32,8 +34,12 @@ export function checkPlacement({ def, x, y, owner, builderId, terrain, query, al
   let nearOwn = false, blocked: { code: string, message: string } | null = null
   query(x,y,BUILD_RADIUS+200,(e,d2)=>{
     if (e.dead || e.inside!==undefined) return
-    // Only the actual deploying crawler is consumed; nearby units still block.
+    // Only the actual deploying crawler is consumed; everything else still counts.
     if (e.id===builderId && e.owner===owner && e.type==='crawler' && d2<1) { nearOwn=true; return }
+    // Eigene Fahrzeuge sind kein Hindernis, sie fahren weg. Beim Entfalten zählt
+    // das: die eigene Begleitung steht nach jedem Gruppenbefehl auf der
+    // Grundfläche, und die Bauraupe wäre dort für immer festgefahren.
+    if (ignoreOwnUnits && e.kind==='unit' && e.owner===owner) return
     if (e.kind==='building') {
       const allowed=e.owner===owner||allied(owner,e.owner)
       if (allowed && d2<=BUILD_RADIUS*BUILD_RADIUS) nearOwn=true

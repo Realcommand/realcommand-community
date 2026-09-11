@@ -483,12 +483,14 @@ export const COALESCED_EVENT_KINDS: readonly ApiEventKind[] = ['task_done', 'inv
 // ---------------------------------------------------------------------------
 
 export type ServerMessage =
-  | { t: 'welcome', player: PlayerInfo, token: string, now: number, protocol: number, faction?: FactionId, created?: boolean }
+  | { t: 'welcome', player: PlayerInfo, token: string, now: number, protocol: number, build?: string, faction?: FactionId, created?: boolean }
   | { t: 'error', msg: string, code?: string, details?: Record<string, unknown> }
   | { t: 'notice', msg: string }
   /** `me` nur bei geänderter `version`; `pt`/`ptGone` = Patch-Deltas (v2). */
   | { t: 'state', now: number, me?: PlayerState, ents: EntityWire[], gone: number[], dead: number[], evs: GameEvent[], pt?: PatchWire[], ptGone?: number[], rc?: ContactWire[], rd?: RadarStationWire[] }
   | { t: 'bases', list: BaseInfo[] }
+  /** Neuer Bau des Servers: verbundene Browser mit älterem Bündel laden neu. */
+  | { t: 'build', build: string }
   | { t: 'players', list: PlayerInfo[], online?: number, total?: number }
   | { t: 'chat', from: number, name: string, text: string }
   | { t: 'pong', c: number, now: number }

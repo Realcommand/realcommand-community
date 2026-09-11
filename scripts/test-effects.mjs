@@ -161,4 +161,65 @@ fx.emitDownwash(13, X, Y, 8)
 assert.equal(fx.particles.length, 3, 'ein Hubschrauber drückt Staub nach außen')
 assert.ok(fx.particles.every(p => p.kind === 'dust' && Math.hypot(p.vx, p.vy) > 8), 'und zwar deutlich')
 
-console.log('Ereigniseffekte bestanden: Mündungsfeuer nach Waffenart, Wasserfontänen, Flakwolken, Druckwellen, Wracks, Trümmer, Späne, Baumeldungen, Avatarverlust, Kielwasser, Kondensstreifen und Rotorabwind.')
+// --- Fahrspuren ---------------------------------------------------------------
+// Die Spur gehört dem Boden: Sie liegt unter den Ketten des gezeichneten
+// Modells und wird mit der Entfernung schmal wie alles andere im Gelände.
+
+const tracked = DEFS['lighttank']
+const treads = makeModel(tracked).filter(p => p.color === '#1c211e' && Math.abs(p.p[2]) > 0)
+assert.equal(treads.length, 2, 'der Panzer fährt auf zwei Ketten')
+fx.tracks.length = 0
+const drive = (steps) => { for (let i = 0; i < steps; i++) fx.emitTracks({ id: 21, type: 'lighttank', x: X, y: Y - 600 + i * 30 }) }
+drive(1)
+assert.equal(fx.tracks.length, 0, 'das erste Bild merkt sich nur den Standort')
+drive(40)
+const rut = fx.tracks[0]
+assert.ok(Math.abs(rut.gauge / tracked.size - Math.abs(treads[0].p[2])) < 0.06, 'die Spurweite ist die Kettenweite des Modells, nicht die Rumpfgröße')
+assert.ok(Math.abs(rut.rail * 2 / tracked.size - treads[0].s[2]) < 0.06, 'und die Spur so breit wie die Kette')
+fx.emitTracks({ id: 21, type: 'lighttank', x: X, y: Y })
+assert.equal(fx.tracks.length, 39, 'stehende Fahrzeuge schreiben keine Segmente fort')
+
+const view = new Camera(new Context())
+view.resize(1280, 720)
+view.heightAt = () => 40
+view.perspective = true
+view.moveTo(X, Y, 0.5)
+const fills = []
+let path = []
+const canvas = {
+  fillStyle: '', lineWidth: 0, strokeStyle: '', lineCap: '',
+  beginPath() { path = [] },
+  moveTo(x, y) { path.push([x, y]) },
+  lineTo(x, y) { path.push([x, y]) },
+  closePath() {}, stroke() { fills.push({ style: this.strokeStyle, path: path.slice() }) },
+  fill() { fills.push({ style: this.fillStyle, path: path.slice() }) },
+  arc() {}, save() {}, restore() {}, translate() {}, rotate() {}, fillRect() {},
+  createRadialGradient: () => ({ addColorStop() {} }), roundRect() {},
+}
+fx.decals.length = 0
+fx.drawDecals(canvas, view)
+assert.equal(fills.length, 1, 'gleich alte Segmente füllen einen Pfad, damit sich die Stöße nicht doppelt decken')
+const quad = (i) => fills[0].path.slice(i * 4, i * 4 + 4)
+const width = (i) => Math.hypot(quad(i)[0][0] - quad(i)[3][0], quad(i)[0][1] - quad(i)[3][1])
+assert.equal(fills[0].path.length % 8, 0, 'jedes gezeichnete Segment liefert zwei Ketten als Vierecke')
+assert.ok(fills[0].path.length / 8 < fx.tracks.length, 'was neben dem Bild liegt, wird gar nicht erst gezeichnet')
+assert.ok(width(fills[0].path.length / 4 - 1) > width(0) * 3, 'nah ist die Spur deutlich breiter als fern')
+const far = quad(0)[0][1], near = quad(fills[0].path.length / 4 - 1)[0][1]
+assert.ok(near > far, 'und sie läuft nach hinten ins Bild')
+fx.update(32)
+for (let i = 0; i < 6; i++) fx.emitTracks({ id: 21, type: 'lighttank', x: X + i * 30, y: Y })
+fills.length = 0
+fx.drawDecals(canvas, view)
+const alpha = fills.map(f => Number(f.style.split(',')[3].slice(0, -1)))
+assert.ok(fills.length > 1, 'alte und frische Spuren werden getrennt gefüllt')
+assert.ok(Math.max(...alpha) === 0.3 && Math.min(...alpha) < 0.3, 'die alte Spur ist blasser als die frische, keine dunkler als frisch')
+fx.update(12)
+fills.length = 0
+fx.drawDecals(canvas, view)
+assert.equal(fills.length, 1, 'die alte Spur ist vergangen, die frische steht noch')
+fx.update(40)
+fills.length = 0
+fx.drawDecals(canvas, view)
+assert.equal(fills.length, 0, 'nach einer Weile ist der Boden wieder unberührt')
+
+console.log('Ereigniseffekte bestanden: Mündungsfeuer nach Waffenart, Wasserfontänen, Flakwolken, Druckwellen, Wracks, Trümmer, Späne, Baumeldungen, Avatarverlust, Kielwasser, Kondensstreifen, Rotorabwind und Fahrspuren.')

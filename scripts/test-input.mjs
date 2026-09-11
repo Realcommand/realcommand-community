@@ -187,9 +187,14 @@ try {
   assert.equal(sent.length,sentBeforeRepeat+1,'repeated Command-clicks are commands, not selection double-clicks')
   click(400,400,{metaKey:true})
   assert.deepEqual(sent.at(-1),{t:'order',ids:[1,2,3],order:{k:'attack',target:enemy.id}})
-  const commandAttack=sent.at(-1)
+  const sentBeforeRightClick=sent.length
   click(400,400,{button:2})
-  assert.deepEqual(sent.at(-1),commandAttack,'Command-left-click and right-click share target behavior')
+  assert.equal(sent.length,sentBeforeRightClick,'a plain right-click gives no order')
+  assert.deepEqual([...state.selected],[],'a plain right-click drops the selection')
+  state.select([1,2,3])
+  click(400,400,{button:2,shiftKey:true})
+  assert.equal(sent.at(-1).order.k,'attack','Shift-right-click still appends a target')
+  assert.deepEqual([...state.selected],[1,2,3],'Shift-right-click keeps the selection')
   transport.owner=49
   click(550,250,{metaKey:true})
   assert.equal(sent.at(-1).order.k,'load');assert.equal(sent.at(-1).order.target,transport.id)
@@ -260,7 +265,7 @@ try {
   dispatch(canvas,'mousemove',{clientX:950,clientY:690})
   dispatch(windowTarget,'mouseup',{button:0,clientX:950,clientY:690})
   assert.deepEqual([...state.selected],[20,21],'drag box shares the same visibility rules')
-  console.log('Eingabe bestanden: ruhige Ränder, Tastatur, Trackpad, Pinch, Ziehen; Doppelklick wählt alle sichtbaren eigenen Einheiten, Command-Klick, Rechtsklick und Linksklick mit Auswahl teilen Zielbefehle, keine Befehle bei Drag/Menü/Blur.')
+  console.log('Eingabe bestanden: ruhige Ränder, Tastatur, Trackpad, Pinch, Ziehen; Doppelklick wählt alle sichtbaren eigenen Einheiten, Command-Klick und Linksklick mit Auswahl teilen Zielbefehle, Rechtsklick hebt die Auswahl auf (mit Umschalt bleibt er Befehl), keine Befehle bei Drag/Menü/Blur.')
 } finally {
   cleanup()
   await ctx.fiber.dispose()

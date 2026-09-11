@@ -26,6 +26,7 @@
 .civic-notice { min-height: 20px; color: #7d5b22; }
 .civic-education { display: flex; gap: 24px; align-items: center; }
 .civic-education p { font-size: 11px; color: #65755f; max-width: 470px; }
+.civic-schooling:empty { display: none; }
 .civic-education button { min-width: 170px; }
 .civic-panel summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
 .civic-buildings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

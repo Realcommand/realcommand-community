@@ -1,5 +1,5 @@
 import type { Context } from 'cordis'
-import type { Category, Def } from '../shared/data.ts'
+import { DEFS, type Category, type Def } from '../shared/data.ts'
 import type { ProductionWire } from '../shared/protocol.ts'
 
 /** Explicitly cancel one finished building, independently of the active queue. */
@@ -85,4 +85,22 @@ export const CANCEL_LABEL: Record<CancelKind, string> = {
   ready: 'Stornieren',
   active: 'Bau abbrechen',
   queued: 'Auftrag streichen',
+}
+
+/**
+ * Was fehlt, um diesen Bauplan freizuschalten: die Voraussetzungen, von denen der
+ * Spieler noch kein Gebäude besitzt. Der Server entscheidet dasselbe (`available`),
+ * aber nur die Liste hier sagt auch **welches** Gebäude fehlt – und darauf zeigt
+ * die Oberfläche einen Kurzweg.
+ */
+export function missingPrereqs(
+  def: Def,
+  owned: Iterable<{ owner?: number, kind?: string, type?: string }>,
+  myId: number | undefined,
+): string[] {
+  const prereq = (def as { prereq?: string[] }).prereq
+  if (!prereq?.length) return []
+  const have = new Set<string>()
+  for (const e of owned) if (e.owner === myId && e.kind === 'b' && e.type) have.add(e.type)
+  return prereq.filter(id => !have.has(id) && DEFS[id])
 }

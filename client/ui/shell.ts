@@ -15,7 +15,7 @@ import { h, Show, For, text, insert, type View } from '../engine/render.ts'
 import { signal, computed, onCleanup, type Accessor } from '../engine/signal.ts'
 import { Icon, type IconName } from '../engine/icons.ts'
 import { Header } from './header.ts'
-import type { Volumes, VolumeKey } from './audio-controls.ts'
+import type { Volumes, VolumeKey, VoiceMode } from './audio-controls.ts'
 import { urlPanelNavigation } from './header-navigation.ts'
 import { MOBILE_QUERY } from '../responsive.ts'
 import { COMMUNITY_REPO_URL } from '../../shared/constants.ts'
@@ -39,6 +39,7 @@ export interface ShellRefs {
   setOnline(v: string): void
   setSound(on: boolean): void
   setMusic(on: boolean): void
+  setVoice(mode: VoiceMode): void
   setVolumes(v: Volumes): void
 
   /** Zeigt am Bauen-Knopf der unteren Leiste, dass etwas läuft, fertig ist oder klemmt. */
@@ -98,6 +99,7 @@ export interface ShellRefs {
   onHome(fn: () => void): void
   onSound(fn: () => void): void
   onMusic(fn: () => void): void
+  onVoice(fn: (mode: VoiceMode) => void): void
   onVolume(fn: (which: VolumeKey, value: number) => void): void
   onApi(fn: () => void): void
   onCivic(fn: () => void): void
@@ -125,6 +127,9 @@ const noop = () => {}
 export function buildShell(root: HTMLElement): ShellRefs {
   // --- Zustand, den das Gerüst selbst hält ---------------------------------
   const [phase, setPhaseSignal] = signal<'login' | 'connecting' | 'spawn' | 'play'>('login')
+  // Solange das Anmeldefenster liegt, ist das ganze HUD nur Kulisse: es fängt
+  // jeden Klick ab. Alles, was dann nicht bedienbar ist, bleibt ausgeblendet.
+  const inWorld = () => phase() !== 'login' && phase() !== 'connecting'
   const [coords, setCoords] = signal('–')
   const [scale, setScale] = signal('–')
   const [clock, setClock] = signal('0h')
@@ -133,7 +138,8 @@ export function buildShell(root: HTMLElement): ShellRefs {
   const [online, setOnline] = signal('0')
   const [sound, setSound] = signal(false)
   const [music, setMusic] = signal(true)
-  const [volumes, setVolumes] = signal<Volumes>({ master: 70, world: 100, ambient: 50, ui: 75, music: 60 })
+  const [voice, setVoiceSignal] = signal<VoiceMode>('speech')
+  const [volumes, setVolumes] = signal<Volumes>({ master: 70, world: 100, ambient: 5, ui: 75, music: 5, radio: 90, machines: 60 })
   const [funds, setFunds] = signal('0')
   const [powerProd, setPowerProd] = signal(0)
   const [powerCons, setPowerCons] = signal(0)
@@ -172,7 +178,8 @@ export function buildShell(root: HTMLElement): ShellRefs {
   const cb = {
     login: noop as Handler, loginCode: noop as Handler<string>, weiter: noop as Handler,
     spawn: noop as Handler, suggest: noop as Handler, home: noop as Handler, sound: noop as Handler,
-    music: noop as Handler, volume: noop as (which: VolumeKey, value: number) => void,
+    music: noop as Handler, voice: noop as Handler<VoiceMode>,
+    volume: noop as (which: VolumeKey, value: number) => void,
     civic: noop as Handler, world: noop as Handler, api: noop as Handler, help: noop as Handler,
     chat: noop as Handler<string>, timeScale: noop as Handler<number>,
     copyToken: noop as Handler, radarZoom: noop as Handler<number>, radarCenter: noop as Handler, radarReset: noop as Handler,
@@ -223,12 +230,12 @@ export function buildShell(root: HTMLElement): ShellRefs {
 
   // --- Kopfzeile -----------------------------------------------------------
   const mobileDock = h('nav', {
-    class: { 'hud-mobile-nav': true, 'is-hidden': () => phase() === 'login' || phase() === 'connecting' },
+    class: { 'hud-mobile-nav': true, 'is-hidden': () => !inWorld() },
     'aria-label': 'Kartenbereiche',
     onKeyDown: (event: Event) => event.stopPropagation(),
   })
   const topbar = Header({
-    host: root, coords, scale, clock, ping, online, connected, sound, music, volumes, speed, protection,
+    host: root, coords, scale, clock, ping, online, connected, active: inWorld, sound, music, voice, volumes, speed, protection,
     mobileMenuHost: mobileDock, onMenuOpen: () => mobileNavigation.set('map'),
     onCivic: () => cb.civic(), onWorld: () => cb.world(), onHome: () => cb.home(),
     onUnits: () => {
@@ -238,6 +245,7 @@ export function buildShell(root: HTMLElement): ShellRefs {
     },
     onApi: () => cb.api(), onSound: () => cb.sound(), onHelp: () => cb.help(),
     onMusic: () => cb.music(),
+    onVoice: (mode) => { setVoiceSignal(mode); cb.voice(mode) },
     onVolume: (which, value) => { setVolumes({ ...volumes(), [which]: value }); cb.volume(which, value) },
   })
   const openMobile = (next: MobilePanel) => {
@@ -268,7 +276,7 @@ export function buildShell(root: HTMLElement): ShellRefs {
     Button({ label: 'Schließen', icon: 'close', onClick: closeMobile }))
 
   // --- Seitenleiste --------------------------------------------------------
-  const sidebar = h('aside', { class: { 'hud-side': true, 'is-hidden': () => phase() === 'login' || phase() === 'connecting' }, 'data-side-panel': sidePanel },
+  const sidebar = h('aside', { class: { 'hud-side': true, 'is-hidden': () => !inWorld() }, 'data-side-panel': sidePanel },
     mobileHead(() => mobilePanel() === 'radar' ? 'Radar & Versorgung' : mobilePanel() === 'units' ? 'Einheiten' : 'Bauen & Produktion'),
     h('div', { class: 'hud-radar', onKeyDown: (e: Event) => e.stopPropagation(), style: {
       '--radar-own': RADAR_COLORS.own, '--radar-foreign': RADAR_COLORS.foreign, '--radar-contact': RADAR_COLORS.contact,
@@ -337,11 +345,11 @@ export function buildShell(root: HTMLElement): ShellRefs {
   )
 
   // --- Funkverkehr ---------------------------------------------------------
-  const chat = h('div', { class: { 'hud-chat': true, 'is-hidden': () => phase() === 'login' || phase() === 'connecting' } },
+  const chat = h('div', { class: { 'hud-chat': true, 'is-hidden': () => !inWorld() } },
     mobileHead('Funk & KI'), chatLog, chatInput)
 
   // --- Overlays ------------------------------------------------------------
-  const loginOverlay = h('div', { class: { 'hud-overlay': true, 'is-hidden': () => phase() !== 'login' && phase() !== 'connecting' } },
+  const loginOverlay = h('div', { class: { 'hud-overlay': true, 'is-hidden': inWorld } },
     h('div', { class: 'hud-dialog' },
       h('h1', { class: 'hud-title' }, 'Real Command'),
       h('p', { class: 'rc-muted' },
@@ -493,8 +501,9 @@ export function buildShell(root: HTMLElement): ShellRefs {
           ['Umschalt', 'hinzufügen'],
           ['Doppelklick', 'alle eigenen Einheiten im Sichtfeld'],
           ['Strg+1…9 / 1…9', 'Gruppe speichern / wählen'],
+          ['Rechtsklick', 'Auswahl aufheben'],
         ]),
-        helpBlock('Befehle (Linksklick mit Auswahl, Rechtsklick oder ⌘-Klick)', [
+        helpBlock('Befehle (Linksklick mit Auswahl oder ⌘-Klick)', [
           ['Boden', 'bewegen'],
           ['Feind', 'angreifen'],
           ['Lagerstätte', 'abbauen'],
@@ -504,7 +513,7 @@ export function buildShell(root: HTMLElement): ShellRefs {
           ['Feuerdisziplin', 'Feuer frei / nur erwidern / Feuer halten'],
           ['S / G', 'Stopp / Wache'],
           ['D / U / R', 'entfalten / entladen / zurück'],
-          ['Escape', 'Auswahl aufheben'],
+          ['Escape / Rechtsklick', 'Auswahl aufheben'],
         ]),
         helpBlock('Bauen und Produktion', [
           ['Klick auf den Bauplan', 'in Auftrag geben'],
@@ -514,9 +523,11 @@ export function buildShell(root: HTMLElement): ShellRefs {
           ['„Stornieren“ an der Karte', 'fertigen Bau zurückgeben'],
           ['Rechtsklick auf die Baukarte', 'zuletzt eingereihten Auftrag zurücknehmen'],
         ]),
-        helpBlock('Ton und Musik', [
+        helpBlock('Ton, Funk und Musik', [
           ['Knopf „Ton“', 'ein- und ausschalten (aus beim ersten Besuch)'],
-          ['Grafik & Ton', 'Regler für Gesamt, Effekte und Musik getrennt'],
+          ['Grafik & Ton', 'Regler für Effekte, Funk und Musik getrennt'],
+          ['Antippen', 'die Einheit meldet sich; Befehle werden quittiert'],
+          ['Funk', 'Sprache, Kürzel oder aus – Wortlaut steht im Funkkanal'],
           ['Titelmusik', '„Kestrel Run“, eigener Schalter neben den Effekten'],
           ['Entfernung', 'leiser, dumpfer und später; ab großer Höhe still'],
           ['Alarm', 'meldet eigene Verluste, nicht jeden Treffer'],
@@ -572,7 +583,7 @@ export function buildShell(root: HTMLElement): ShellRefs {
     root, canvas, minimap, portrait,
     setCoords, setScale, setClock,
     setPing: (v, ok) => { setPing(v); setConnected(ok) },
-    setOnline, setSound, setMusic, setVolumes,
+    setOnline, setSound, setMusic, setVoice: setVoiceSignal, setVolumes,
     setProduction: ({ progress, ready, blocked }) => {
       const done = Math.round(Math.max(0, Math.min(1, progress)) * 100)
       buildDock.style.setProperty('--prod', done + '%')
@@ -619,6 +630,7 @@ export function buildShell(root: HTMLElement): ShellRefs {
     onHome: (fn) => { cb.home = fn },
     onSound: (fn) => { cb.sound = fn },
     onMusic: (fn) => { cb.music = fn },
+    onVoice: (fn) => { cb.voice = fn },
     onVolume: (fn) => { cb.volume = fn },
     onApi: (fn) => { cb.api = fn },
     onCivic: (fn) => { cb.civic = fn },

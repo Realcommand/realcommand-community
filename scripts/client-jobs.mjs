@@ -10,7 +10,7 @@ export const clientEntryPoints = [
 ]
 
 /** esbuild-Aufträge für alle Client-Bündel. `prod` verkleinert und lässt die Quellkarte weg. */
-export function clientJobs({ publicDir = 'public', prod = false } = {}) {
+export function clientJobs({ publicDir = 'public', prod = false, build = '' } = {}) {
   return clientEntryPoints.map(([entry, out]) => ({
     entryPoints: [entry],
     bundle: true,
@@ -20,6 +20,7 @@ export function clientJobs({ publicDir = 'public', prod = false } = {}) {
     target: ['es2022'],
     sourcemap: !prod,
     minify: prod,
+    define: { __BUILD__: JSON.stringify(build || String(Date.now())) },
     logLevel: 'info',
   }))
 }

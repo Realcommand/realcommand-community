@@ -2,6 +2,7 @@ import { Context, Service } from 'cordis'
 import { DEFS, type Def, type FactionId } from '../shared/data.ts'
 import type { BaseInfo, ContactWire, EntityKind, EntityWire, GameEvent, PlayerInfo, PlayerState, RadarStationWire, ServerMessage } from '../shared/protocol.ts'
 import { translateError } from '../shared/errors.ts'
+import { BUILD } from '../shared/constants.ts'
 import type { FireDiscipline, RouteWaypoint } from '../shared/tactics.ts'
 
 function angleDeltaLocal(a: number, b: number) {
@@ -162,6 +163,10 @@ export class GameState extends Service {
   private handle(msg: ServerMessage) {
     switch (msg.t) {
       case 'welcome':
+        // Der Server läuft mit einem neueren Bau als dieses Bündel: der Browser
+        // lädt sich selbst neu. Ein Client, der nach einem Update stillschweigend
+        // mit altem Code weiterspielt, zeigt falsche Effekte und alte Regeln.
+        if (msg.build && msg.build !== BUILD && BUILD !== 'dev') this.reloadForNewBuild(msg.build)
         this.myId = msg.player.id
         this.myInfo = msg.player
         this.faction = msg.faction
@@ -174,6 +179,9 @@ export class GameState extends Service {
         // kommen sie nach dem Löschen der Browserdaten nie wieder an ihre Basis.
         if (msg.created) this.ctx.emit('state/created', msg.token)
         this.setPhase(msg.player.spawned ? 'play' : 'spawn')
+        break
+      case 'build':
+        if (msg.build !== BUILD && BUILD !== 'dev') this.reloadForNewBuild(msg.build)
         break
       case 'error':
         this.ctx.emit('state/notice', translateError(msg.code, msg.msg), 'error')
@@ -358,6 +366,16 @@ export class GameState extends Service {
   }
 
   /** Eigene Kommandozentrale (oder erstes eigenes Gebäude). */
+  /** Einmal je Bau neu laden, nie in einer Schleife. */
+  private reloadForNewBuild(build: string) {
+    try {
+      if (sessionStorage.getItem('rc.reloaded') === build) return
+      sessionStorage.setItem('rc.reloaded', build)
+    } catch { /* ohne Sitzungsspeicher lieber gar nicht neu laden */ return }
+    this.ctx.emit('state/notice', 'Neue Spielversion – die Seite wird neu geladen.', 'info')
+    setTimeout(() => location.reload(), 400)
+  }
+
   homePosition(): { x: number, y: number } | undefined {
     for (const e of this.entities.values()) if (e.owner === this.myId && e.type === 'command') return { x: e.x, y: e.y }
     for (const e of this.entities.values()) if (e.owner === this.myId && e.kind === 'b') return { x: e.x, y: e.y }

@@ -8,6 +8,7 @@ import { DEFS } from '../shared/data.ts'
 import type { GameEvent } from '../shared/protocol.ts'
 import type { Camera } from './camera.ts'
 import { makeModel, type Part } from './poly/models.ts'
+import { Euler, Vector3 } from 'three'
 
 declare module 'cordis' {
   interface Context {
@@ -20,7 +21,8 @@ interface Flash { x: number, y: number, angle: number, t: number, ttl: number, s
 interface Ring { x: number, y: number, r: number, t: number, ttl: number, color: string, width: number }
 interface Particle { x: number, y: number, vx: number, vy: number, t: number, ttl: number, size: number, grow: number, r: number, g: number, b: number, alpha: number, kind: 'smoke' | 'fire' | 'spark' | 'dust' | 'debris' | 'steam', drag: number, elevation?: number, rise?: number }
 interface Decal { x: number, y: number, r: number, t: number, ttl: number, kind: 'crater' | 'wreck' | 'rubble', heading: number, w: number, h: number }
-interface Track { x0: number, y0: number, x1: number, y1: number, w: number, t: number, ttl: number }
+/** Ein Stück Fahrspur in Weltmetern: Abstand der Ketten und ihre halbe Breite. */
+interface Track { x0: number, y0: number, x1: number, y1: number, gauge: number, rail: number, t: number, ttl: number }
 /** Aufsteigende Zahl über dem Ort des Geschehens, etwa „+1 Holz“. */
 interface Float { x: number, y: number, text: string, color: string, t: number, ttl: number }
 
@@ -45,6 +47,7 @@ export class Effects extends Service {
   private lastTrack = new Map<number, { x: number, y: number }>()
   private emitTimers = new Map<number | string, number>()
   private exhaustPorts = new Map<string, Part[]>()
+  private contacts = new Map<string, { gauge: number, rail: number }>()
   private time = 0
 
   constructor(ctx: Context) {
@@ -257,16 +260,47 @@ export class Effects extends Service {
   }
 
   /** Kettenspuren fahrender Fahrzeuge (Segmente alle paar Meter). */
-  emitTracks(id: number, x: number, y: number, heading: number, width: number) {
-    const last = this.lastTrack.get(id)
-    if (!last) { this.lastTrack.set(id, { x, y }); return }
-    const d = Math.hypot(x - last.x, y - last.y)
-    if (d < Math.max(4, width * 0.8)) return
-    if (d > 80) { this.lastTrack.set(id, { x, y }); return }
+  emitTracks(e: { id: number, type: string, x: number, y: number }) {
+    const last = this.lastTrack.get(e.id)
+    if (!last) { this.lastTrack.set(e.id, { x: e.x, y: e.y }); return }
+    const size = DEFS[e.type].size, d = Math.hypot(e.x - last.x, e.y - last.y)
+    if (d < Math.max(3, size)) return
+    if (d > 80) { this.lastTrack.set(e.id, { x: e.x, y: e.y }); return }
     if (this.tracks.length > 900) this.tracks.splice(0, 100)
-    this.tracks.push({ x0: last.x, y0: last.y, x1: x, y1: y, w: width, t: 0, ttl: 40 })
-    this.lastTrack.set(id, { x, y })
-    void heading
+    const tread = this.groundContact(e.type)
+    this.tracks.push({ x0: last.x, y0: last.y, x1: e.x, y1: e.y, gauge: tread.gauge * size, rail: tread.rail * size, t: 0, ttl: 40 })
+    this.lastTrack.set(e.id, { x: e.x, y: e.y })
+  }
+
+  /**
+   * Wo das gezeichnete Modell den Boden berührt: die unterste Lage seiner
+   * Teile, seitlich versetzt. Das sind Ketten oder Räder, und genau dort
+   * liegen die Spuren – nicht in einer aus der Rumpfgröße geratenen Breite.
+   */
+  private groundContact(type: string) {
+    const cached = this.contacts.get(type)
+    if (cached) return cached
+    const rotation = new Euler(), vertex = new Vector3()
+    const parts = makeModel(DEFS[type]).map(p => {
+      rotation.set(...p.r)
+      let across = 0, tall = 0
+      for (const x of [-.5, .5]) for (const y of [-.5, .5]) for (const z of [-.5, .5]) {
+        vertex.set(x * p.s[0], y * p.s[1], z * p.s[2]).applyEuler(rotation)
+        across = Math.max(across, Math.abs(vertex.z)); tall = Math.max(tall, Math.abs(vertex.y))
+      }
+      return { inner: Math.abs(p.p[2]) - across, outer: Math.abs(p.p[2]) + across, bottom: p.p[1] - tall }
+    })
+    // Nur was seitlich neben der Mitte sitzt, kommt als Kette in Frage – ein
+    // Räumschild reicht tiefer, hinterlässt aber keine Spur. Von diesen Teilen
+    // trägt die unterste Lage: die Kette, sonst die Räder.
+    const sides = parts.filter(p => p.inner > 0)
+    const floor = Math.min(...sides.map(p => p.bottom))
+    const rails = sides.filter(p => p.bottom < floor + .012)
+    const inner = rails.length ? Math.min(...rails.map(p => p.inner)) : .28
+    const outer = rails.length ? Math.max(...rails.map(p => p.outer)) : .48
+    const contact = { gauge: (inner + outer) / 2, rail: (outer - inner) / 2 }
+    this.contacts.set(type, contact)
+    return contact
   }
 
   /** Small, short-lived wisps originate at the normalized model's chimney mouths. */
@@ -385,20 +419,49 @@ export class Effects extends Service {
     if (cam.mpp > 60) return
     const pxPerM = 1 / cam.mpp
     if (cam.mpp < 6) {
-      g.lineCap = 'round'
+      // Die Spur liegt auf dem Boden. Kettenabstand und Kettenbreite stehen in
+      // Metern und werden mitprojiziert: fern wird die Spur schmal wie das
+      // Gelände darunter, nah breit. Je Blendstufe entsteht ein einziger Pfad,
+      // denn getrennt gefüllte Stöße decken sich doppelt und machen aus der
+      // Spur eine Perlenkette.
+      const levels = new Map<number, number[][]>()
       for (const t of this.tracks) {
-        const fade = Math.min(1, (t.ttl - t.t) / 12) * 0.35
-        const [ax, ay] = project(t.x0, t.y0)
-        const [bx, by] = project(t.x1, t.y1)
+        const dx = t.x1 - t.x0, dy = t.y1 - t.y0, len = Math.hypot(dx, dy) || 1
+        // Eine halbe Kettenbreite Überstand je Ende: in Kurven bleibt zwischen
+        // zwei Segmenten sonst eine Kerbe stehen.
+        const ex = dx / len * t.rail, ey = dy / len * t.rail
+        const x0 = t.x0 - ex, y0 = t.y0 - ey, x1 = t.x1 + ex, y1 = t.y1 + ey
+        const h0 = cam.heightAt(x0, y0), h1 = cam.heightAt(x1, y1)
+        const [ax, ay] = project(x0, y0, h0)
+        const [bx, by] = project(x1, y1, h1)
         if ((ax < -50 && bx < -50) || (ay < -50 && by < -50) || (ax > cam.width + 50 && bx > cam.width + 50) || (ay > cam.height + 50 && by > cam.height + 50)) continue
-        const ang = Math.atan2(by - ay, bx - ax)
-        const off = Math.max(1.5, t.w * 0.55 * pxPerM)
-        const nx = -Math.sin(ang) * off, ny = Math.cos(ang) * off
-        g.strokeStyle = `rgba(35,30,22,${fade})`
-        g.lineWidth = Math.max(1, t.w * 0.22 * pxPerM)
-        g.beginPath(); g.moveTo(ax + nx, ay + ny); g.lineTo(bx + nx, by + ny); g.moveTo(ax - nx, ay - ny); g.lineTo(bx - nx, by - ny); g.stroke()
+        // Ein Meter quer zur Fahrt, an beiden Enden projiziert: daraus folgen
+        // Richtung und Maßstab der Spur an dieser Stelle des Bildes.
+        const nx = -dy / len, ny = dx / len
+        const [lax, lay] = project(x0 + nx, y0 + ny, h0)
+        const [lbx, lby] = project(x1 + nx, y1 + ny, h1)
+        const pa = Math.hypot(lax - ax, lay - ay) || 1e-6, pb = Math.hypot(lbx - bx, lby - by) || 1e-6
+        const uax = (lax - ax) / pa, uay = (lay - ay) / pa, ubx = (lbx - bx) / pb, uby = (lby - by) / pb
+        const ra = Math.max(0.4, pa * t.rail), rb = Math.max(0.4, pb * t.rail)
+        const step = Math.max(1, Math.ceil(Math.min(1, (t.ttl - t.t) / 12) * 5))
+        let quads = levels.get(step)
+        if (!quads) levels.set(step, quads = [])
+        for (const side of [-1, 1]) {
+          const ca = pa * t.gauge * side, cb = pb * t.gauge * side
+          quads.push([ax + uax * (ca - ra), ay + uay * (ca - ra), bx + ubx * (cb - rb), by + uby * (cb - rb),
+            bx + ubx * (cb + rb), by + uby * (cb + rb), ax + uax * (ca + ra), ay + uay * (ca + ra)])
+        }
       }
-      g.lineCap = 'butt'
+      for (const [step, quads] of levels) {
+        g.fillStyle = `rgba(35,30,22,${step / 5 * 0.3})`
+        g.beginPath()
+        for (const q of quads) {
+          g.moveTo(q[0], q[1])
+          for (let i = 2; i < q.length; i += 2) g.lineTo(q[i], q[i + 1])
+          g.closePath()
+        }
+        g.fill()
+      }
     }
     for (const d of this.decals) {
       const fade = Math.min(1, (d.ttl - d.t) / 15)

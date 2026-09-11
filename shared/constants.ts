@@ -73,6 +73,15 @@ export const DEPLOY_TIME = 45 // s: Bauraupe -> Kommandozentrale
 
 /** Version 3 separates finished buildings from active production. */
 export const PROTOCOL_VERSION = 3
+/**
+ * Kennung dieses Baus. Der Bundler ersetzt `__BUILD__` in Server- und
+ * Clientbündel durch denselben Wert; ohne Bundler (Tests) bleibt 'dev'.
+ * Der Server schickt sie beim Anmelden mit, damit ein Browser mit veraltetem
+ * Bündel nicht stillschweigend weiterläuft.
+ */
+declare const __BUILD__: string | undefined
+export const BUILD: string = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev'
+
 /** Speicherstand-Version von serialize()/restore() (SPEC §3). */
 export const SAVE_VERSION = 2
 

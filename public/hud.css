@@ -370,6 +370,23 @@ body { background: var(--bg-sunken); }
   right: calc(288px + var(--space-4) + var(--space-6));
 }
 
+/* Fehlende Voraussetzungen als Kurzweg: kleine Symbole unter dem Namen. */
+.hud-item-needs { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: .6875rem; }
+.hud-need {
+  display: inline-flex; padding: 1px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-raised); cursor: pointer; line-height: 0;
+}
+.hud-need canvas { width: 22px; height: 14px; opacity: .85; }
+.hud-need:hover { border-color: var(--accent); }
+.hud-need:hover canvas { opacity: 1; }
+.hud-need:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Kurz aufleuchten, damit man das Ziel des Sprungs sieht. */
+.hud-item.is-flash { animation: hud-flash 1.2s ease-out; }
+@keyframes hud-flash {
+  0%, 40% { border-color: var(--accent); background: var(--bg-selected); }
+  100% { border-color: var(--line); background: none; }
+}
+
 /* Warteschlangenzeile: Kategorie, laufender Bau, Restzeit, Blockgrund, Aufträge. */
 .hud-qcat { padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg-raised); color: var(--text-muted); cursor: pointer; }
 .hud-qcat.is-elsewhere { border-color: var(--accent); color: var(--text-accent); }
@@ -453,7 +470,8 @@ button.hud-qnow:focus-visible, button.hud-qready:focus-visible { outline: 2px so
   cursor: pointer;
   white-space: nowrap;
 }
-.hud-action:hover { border-color: var(--line-strong); background: var(--bg-hover); }
+.hud-action:hover:not(:disabled) { border-color: var(--line-strong); background: var(--bg-hover); }
+.hud-action:disabled { opacity: .45; cursor: not-allowed; }
 .hud-action[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--bg-sunken); }
 .hud-action[aria-pressed="mixed"] { border-color: var(--accent); border-style: dashed; }
 .hud-tactics { flex: 1 1 100%; min-width: 0; }
